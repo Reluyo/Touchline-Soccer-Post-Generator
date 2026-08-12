@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soccer carousel — slide template</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* ---- BRAND TOKENS: soccer topic ---- */
+    --accent:        #16A39B;   /* dark teal — the "blue" of the reference */
+    --accent-deep:   #0B6B66;   /* shadow end of the teal texture */
+    --accent-light:  #3FD3C8;   /* highlight end of the teal texture */
+    --ink:           #FFFFFF;
+    --bg:            #000000;
+
+    --slide-w: 1080px;
+    --slide-h: 1350px;         /* 4:5 Instagram portrait */
+  }
+
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:#101314; color:#E8ECEC;
+    font-family:'Inter',system-ui,sans-serif;
+    padding:32px 20px 80px;
+  }
+
+  /* ---------- page chrome ---------- */
+  .head{max-width:1120px;margin:0 auto 28px}
+  .head h1{font-family:'Anton',sans-serif;font-weight:400;letter-spacing:.01em;
+    font-size:30px;margin:0 0 6px;text-transform:uppercase}
+  .head p{margin:0;font-size:14px;color:#93A0A0;max-width:60ch;line-height:1.55}
+
+  .controls{max-width:1120px;margin:0 auto 32px;display:flex;flex-wrap:wrap;
+    gap:18px;align-items:center;padding:16px 18px;background:#171B1C;
+    border:1px solid #262C2D;border-radius:10px}
+  .controls label{font-size:13px;color:#B9C4C4;display:flex;align-items:center;gap:8px}
+  .controls input[type=color]{width:38px;height:28px;border:1px solid #303738;
+    border-radius:5px;background:none;padding:2px;cursor:pointer}
+  .controls input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+  .controls .hint{font-size:12px;color:#6E7A7A;margin-left:auto}
+
+  .rail{max-width:1120px;margin:0 auto;display:flex;flex-direction:column;gap:40px}
+  .cap{font-size:12px;letter-spacing:.09em;text-transform:uppercase;
+    color:#7C8888;margin:0 0 10px}
+
+  /* ---------- the slide ---------- */
+  .slide{
+    position:relative; width:var(--slide-w); height:var(--slide-h);
+    background:var(--bg); overflow:hidden;
+    transform-origin:top left;
+  }
+  .scaler{overflow:hidden}   /* holds the scaled slide */
+
+  /* photo occupies top ~72%, fades into black behind the headline */
+  .photo{
+    position:absolute; inset:0 0 auto 0; height:78%;
+    background-size:cover; background-position:center;
+  }
+  .photo::after{
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(to bottom,
+      rgba(0,0,0,0) 46%,
+      rgba(0,0,0,.55) 68%,
+      rgba(0,0,0,.94) 88%,
+      #000 100%);
+  }
+
+  /* placeholder art so you can judge layout without real photos */
+  .ph{background:
+      radial-gradient(circle at 30% 32%, #24534F 0%, #122A29 55%, #0A1414 100%);
+    position:relative}
+  .ph::before{
+    content:attr(data-label);
+    position:absolute; inset:0; display:flex; align-items:center;
+    justify-content:center; text-align:center; padding:0 12%;
+    font-family:'Inter',sans-serif; font-size:26px; font-weight:500;
+    letter-spacing:.04em; color:rgba(255,255,255,.30); line-height:1.5;
+  }
+
+  .wordmark{
+    position:absolute; top:26px; right:34px; z-index:3;
+    font-family:'Anton',sans-serif; font-size:26px; letter-spacing:.24em;
+    color:rgba(255,255,255,.88); text-transform:uppercase;
+    text-shadow:0 2px 10px rgba(0,0,0,.75);
+  }
+
+  /* ---------- text block ---------- */
+  .text{
+    position:absolute; left:0; right:0; bottom:0; z-index:2;
+    padding:0 42px 54px; text-align:left;
+  }
+  .headline{
+    font-family:'Anton',sans-serif; font-weight:400;
+    font-size:104px; line-height:.88; letter-spacing:-.005em;
+    text-transform:uppercase; margin:0 0 26px; text-align:center;
+    /* squeeze it like the reference: tall + narrow */
+    transform:scaleX(.92); transform-origin:center;
+  }
+  .headline .w{color:var(--ink)}          /* connector words */
+  .headline .k{                            /* key words — teal, textured */
+    background:linear-gradient(168deg,
+      var(--accent-light) 0%, var(--accent) 38%,
+      var(--accent-deep) 72%, var(--accent) 100%);
+    -webkit-background-clip:text; background-clip:text; color:transparent;
+  }
+  .headline .k, .headline .w{
+    filter:drop-shadow(0 3px 0 rgba(0,0,0,.85));
+  }
+
+  .body{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700;
+    font-size:37px; line-height:1.13; letter-spacing:.005em;
+    text-transform:uppercase; color:var(--ink); margin:0 auto;
+    text-shadow:0 2px 5px rgba(0,0,0,.9);
+    max-width:96%; text-align:center;
+  }
+
+  /* cover slide extras */
+  .kicker{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:34px;
+    letter-spacing:.10em; text-transform:uppercase; color:var(--ink);
+    margin:22px 0 0; text-align:center;
+  }
+  .swipe{
+    font-family:'Barlow Condensed',sans-serif; font-weight:700; font-size:29px;
+    letter-spacing:.16em; text-transform:uppercase; margin:16px 0 0;
+    text-align:center; color:var(--accent-light);
+  }
+  .cover-mark{
+    font-family:'Anton',sans-serif; font-size:27px; letter-spacing:.26em;
+    color:#fff; text-transform:uppercase; margin:0 0 24px;
+    display:flex; align-items:center; justify-content:center; gap:20px;
+    white-space:nowrap; text-shadow:0 2px 10px rgba(0,0,0,.75);
+  }
+  .cover-mark::before,.cover-mark::after{
+    content:''; width:150px; height:2px; background:#fff;
+  }
+
+  /* caption panel */
+  .caption{
+    background:#171B1C; border:1px solid #262C2D; border-radius:10px;
+    padding:22px 24px; font-size:14.5px; line-height:1.62; color:#C9D2D2;
+    max-width:var(--slide-w);
+  }
+  .caption strong{color:#fff}
+  .caption .tags{color:var(--accent-light)}
+  .caption .src{color:#8B9797}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <h1>Soccer carousel — slide template</h1>
+  <p>Same structure as the reference account, retuned for soccer: dark teal replaces the blue, no slide counter (Instagram draws that), wordmark on every slide. Photo areas are empty placeholders — the fetcher fills that slot per post.</p>
+</div>
+
+<div class="controls">
+  <label>Accent <input type="color" id="accent" value="#16A39B"></label>
+  <label>Highlight <input type="color" id="accentLight" value="#3FD3C8"></label>
+  <label>Shadow <input type="color" id="accentDeep" value="#0B6B66"></label>
+  <span class="hint">Slides render at 1080×1350, scaled to fit here.</span>
+</div>
+
+<div class="rail">
+
+  <!-- ============ COVER ============ -->
+  <div>
+    <p class="cap">Slide 1 — cover</p>
+    <div class="scaler"><div class="slide center">
+      <div class="photo ph" data-label="Collage of the day's stories — 3–5 cutouts, crest or stadium backdrop"></div>
+      <div class="text">
+        <div class="cover-mark">Touchline</div>
+        <h2 class="headline">
+          <span class="k">What just happened</span> <span class="w">in</span>
+          <span class="k">european football</span> <span class="w">today?</span>
+        </h2>
+        <p class="swipe">Swipe for more ›</p>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ============ STORY ============ -->
+  <div>
+    <p class="cap">Slides 2–8 — one story each</p>
+    <div class="scaler"><div class="slide">
+      <div class="photo ph" data-label="Story photo — subject centred, headroom at the bottom third"></div>
+      <div class="wordmark">Touchline</div>
+      <div class="text">
+        <h2 class="headline">
+          <span class="k">Liverpool</span> <span class="w">agree</span>
+          <span class="k">£70m deal</span>
+        </h2>
+        <p class="body">Liverpool have reached an agreement for the midfielder after a third bid. He is expected in England this week for a medical ahead of a five-year contract.</p>
+      </div>
+    </div></div>
+  </div>
+
+  <div>
+    <p class="cap">Story — longer headline, three lines</p>
+    <div class="scaler"><div class="slide">
+      <div class="photo ph" data-label="Story photo"></div>
+      <div class="wordmark">Touchline</div>
+      <div class="text">
+        <h2 class="headline">
+          <span class="k">Real madrid</span> <span class="w">and</span>
+          <span class="k">barcelona</span> <span class="w">meet in the</span>
+          <span class="k">final</span>
+        </h2>
+        <p class="body">The Clásico decides the Supercopa for the third season running. Madrid have won the last two meetings, both by a single goal.</p>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ============ MONDAY VARIANT ============ -->
+  <div>
+    <p class="cap">Monday variant — weekend round-up cover</p>
+    <div class="scaler"><div class="slide center">
+      <div class="photo ph" data-label="Weekend collage — one image per featured match"></div>
+      <div class="text">
+        <div class="cover-mark">Touchline</div>
+        <h2 class="headline">
+          <span class="w">the</span> <span class="k">biggest matches</span>
+          <span class="w">of the</span> <span class="k">weekend</span>
+        </h2>
+        <p class="kicker">Matchweek 4 · Every big five league</p>
+        <p class="swipe">Swipe for more ›</p>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ============ FOLLOW CTA ============ -->
+  <div>
+    <p class="cap">Final slide — follow prompt</p>
+    <div class="scaler"><div class="slide center">
+      <div class="photo ph" data-label="Phone mockup showing your grid, or a wide stadium shot"></div>
+      <div class="text">
+        <div class="cover-mark">Touchline</div>
+        <h2 class="headline">
+          <span class="w">you may</span> <span class="k">never</span>
+          <span class="w">find our page again if</span> <span class="k">you don't follow us</span>
+        </h2>
+      </div>
+    </div></div>
+  </div>
+
+  <!-- ============ CAPTION ============ -->
+  <div>
+    <p class="cap">Caption — same shape as the reference</p>
+    <div class="caption">
+      <p><strong>touchline</strong> Swipe ⬅️ for the biggest stories across Europe's top five leagues — transfers, results, injuries and everything in between ⚽📰</p>
+      <p>Liverpool have agreed a £70m fee for the midfielder, while Real Madrid and Barcelona meet in another Supercopa final. Bayern's centre-back is out until November, and Milan's manager is under pressure after a third straight defeat.</p>
+      <p>Elsewhere, PSG completed the signing of the Ligue 1 top scorer, Arsenal's winger returned to training ahead of schedule, and the Bundesliga confirmed a change to its winter break.</p>
+      <p class="src">Sources: BBC Sport · The Athletic · Sky Sports · Marca · L'Équipe · Kicker · Gazzetta</p>
+      <p class="tags">#premierleague #laliga #seriea #bundesliga #transfernews</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  const root = document.documentElement;
+  const bind = (id, varName) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => root.style.setProperty(varName, el.value));
+  };
+  bind('accent', '--accent');
+  bind('accentLight', '--accent-light');
+  bind('accentDeep', '--accent-deep');
+
+  // scale each 1080x1350 slide down to fit the page width
+  function fit(){
+    document.querySelectorAll('.scaler').forEach(box => {
+      const slide = box.querySelector('.slide');
+      const w = Math.min(box.parentElement.clientWidth, 520);
+      const s = w / 1080;
+      slide.style.transform = `scale(${s})`;
+      box.style.width  = w + 'px';
+      box.style.height = (1350 * s) + 'px';
+    });
+  }
+  fit();
+  window.addEventListener('resize', fit);
+</script>
+
+</body>
+</html>
