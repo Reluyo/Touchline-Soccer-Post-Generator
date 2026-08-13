@@ -3,10 +3,9 @@ import { writeCaption } from '@/lib/claude';
 import { supabaseAdmin } from '@/lib/supabase';
 
 // Record story fingerprints as seen so a future run won't re-select them.
-// Called both when a post is queued and when it's approved -- queuing is
-// what actually stops a re-run from picking the same story again (nothing
-// else does), approval is a belt-and-suspenders repeat for posts created
-// before this existed. Cover/CTA slides have no fingerprint and are skipped.
+// Only called on approval -- a story that was merely generated and never
+// approved (a discarded draft, a rejected test run) should stay eligible.
+// Cover/CTA slides have no fingerprint and are skipped.
 async function recordSeen(db, topicId, slides) {
   const seen = (slides || [])
     .filter((s) => s.fingerprint)
@@ -51,7 +50,6 @@ export async function POST(request) {
       fingerprint: s.fingerprint || null,
     }));
     await db.from('slides').insert(rows);
-    await recordSeen(db, topic.id, rows);
 
     // Trim the queue to the three newest.
     const { data: queued } = await db
@@ -99,9 +97,9 @@ export async function GET(request) {
   }
 }
 
-// Approve a post: mark it approved. Its stories were already recorded as
-// seen when the post was queued (see recordSeen above) -- this is a
-// no-op repeat of that for safety, not the primary mechanism.
+// Approve a post: mark it approved and record its stories as seen so a
+// future run won't re-select them without a genuine update (a materially
+// different headline produces a different fingerprint and passes through).
 export async function PATCH(request) {
   try {
     const { postId } = await request.json();
