@@ -4,6 +4,12 @@ import { useEffect, useRef, useState } from 'react';
 import Slide from '@/components/Slide';
 import { captureSlide, downloadDataUrl } from '@/lib/capture';
 
+// The CTA slide is the same "follow us" prompt on every post, so it
+// uses one fixed image rather than generating a new one each run --
+// keeps the closing slide visually consistent and saves an image
+// generation call. Swap this URL to change it account-wide.
+const CTA_IMAGE_URL = 'https://bnasaybdlczxfbifezxz.supabase.co/storage/v1/object/public/generated-images/cta-1786647377181-o0dhbp.png';
+
 // Turns a written slide's copy into the plain-text description the
 // image generator uses to depict the real people and clubs in that story.
 function slideText(slide) {
@@ -137,9 +143,6 @@ export default function Dashboard() {
         image_url: coverImage,
       };
 
-      setProgress('Generating closing image…');
-      const { image_url: ctaImage } = await post('/api/image', { role: 'cta' });
-
       const cta = {
         role: 'cta',
         headline_parts: [
@@ -149,7 +152,7 @@ export default function Dashboard() {
           { text: "you don't follow us", key: true },
         ],
         body: null,
-        image_url: ctaImage,
+        image_url: CTA_IMAGE_URL,
       };
 
       setProgress('Writing caption and saving…');
