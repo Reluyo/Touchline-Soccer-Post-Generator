@@ -80,7 +80,7 @@ whole carousel" flow. Full detail in README; short version:
 `/api/rank` and `lib/claude.js`'s `rankStories` were deleted — nothing calls
 them anymore.
 
-## RSS feed verification — IN PROGRESS, hand off checklist
+## RSS feed verification — DONE (2026-08-13, second session)
 
 **Why this matters**: several feeds had URLs that were dead, wrong, or (worse)
 silently returning content that isn't what the app expects — see AS.com's
@@ -88,9 +88,9 @@ video-as-image bug below. A feed that 404s is obvious (shows in the failed-feeds
 banner); a feed that returns *plausible-looking but wrong* content is not, and
 can silently degrade post quality for weeks before anyone notices.
 
-**Methodology that worked** (repeat this for each remaining feed): ask the user
-to open the feed URL directly in their browser and paste back either (a) the
-raw XML if it loads, or (b) a screenshot/description of what happens. Then:
+**Methodology that worked** (repeat this if a feed breaks again later): ask the
+user to open the feed URL directly in their browser and paste back either (a)
+the raw XML if it loads, or (b) a screenshot/description of what happens. Then:
 1. Confirm it's real, current football content — not empty, not a dead
    redirect, not a different sport/section.
 2. Check the actual image hosts used (`media:content`, `media:thumbnail`,
@@ -113,26 +113,27 @@ raw XML if it loads, or (b) a screenshot/description of what happens. Then:
 6. Update `topics.feeds` in Supabase (source of truth, live immediately) AND
    `schema.sql` (keeps a fresh setup from re-seeding a since-fixed dead URL).
 
-**Status per feed** (as of 2026-08-13):
+**Final status, all 10 feeds checked** (as of 2026-08-13):
 
 | Feed | lang | Status |
 |---|---|---|
-| Marca | es | ✅ Fixed this session — real URL is `objetos.estaticos-marca.com/rss/futbol/primera-division.xml`, confirmed by the user pasting raw feed content. Image host `objetos.estaticos-marca.com` allowlisted. |
-| AS.com | es | ✅ Fixed this session — real URL is `feeds.as.com/mrss-s/pages/as/site/as.com/section/futbol/portada/` (an earlier guess, `mrss-s/pages/futbol`, was wrong). Confirmed by the user. Exposed and fixed the video-as-image bug (see below). |
-| BBC Sport | en | ⬜ Not checked this session. Original feed, never reported broken, but never verified with real content either. |
-| Guardian Football | en | ⬜ Not checked directly, but the *blur* bug was diagnosed and fixed (their CDN's `?width=140` param wasn't being upgraded — now rewritten to `?width=1900` in `upgradeImageUrl()`). Worth a real content check anyway. |
-| Get French Football News | en | ⬜ Not checked this session. |
-| Get Italian Football News | en | ⬜ Not checked this session. |
-| Football Italia | en | ⬜ Not checked this session. Has appeared as a working source in generated posts (Badiashile, Kristensen stories), so probably fine, but not verified against raw feed content. |
-| Football Espana | en | ⬜ Not checked this session. Same as above — has appeared as a working source (Cristian Romero story). |
-| kicker | de | ⬜ Not checked this session. German — will hit `translateCandidates()`, worth confirming that path actually renders sensible English in the picker, not just that the feed loads. |
-| LEquipe | fr | ⬜ Not checked this session. French — same translation-path concern as kicker. |
+| Marca | es | ✅ Fixed prior session — `objetos.estaticos-marca.com/rss/futbol/primera-division.xml`. |
+| AS.com | es | ✅ Fixed prior session — `feeds.as.com/mrss-s/pages/as/site/as.com/section/futbol/portada/`. |
+| Guardian Football | en | ✅ Fixed this session — old `/football/rss` no longer resolves, real URL is `theguardian.com/us/soccer/rss`. Confirmed by the user pasting raw feed content; updated in Supabase and `schema.sql`. |
+| BBC Sport | en | ✅ Confirmed working as-is, no change. |
+| Get French Football News | en | ✅ Confirmed working as-is, no change. |
+| Get Italian Football News | en | ✅ Confirmed working as-is, no change. |
+| Football Italia | en | ✅ Confirmed working as-is, no change. |
+| Football Espana | en | ✅ Confirmed working as-is, no change. |
+| kicker | de | ✅ Confirmed working as-is, no change. German content confirmed real (Bundesliga transfer news) — still worth watching whether `translateCandidates()` renders it well in the picker, but the feed itself is fine. |
+| LEquipe | fr | ✅ Confirmed working as-is, no change. The `dwh.lequipe.fr` hostname looked suspicious (internal-sounding) but is genuinely their public edito RSS API. |
 
-**Next session**: work through the ⬜ rows one at a time using the methodology
-above. Prioritize kicker and LEquipe slightly higher than the rest — they're
-the only other non-English feeds, so they're the best test of whether
-`translateCandidates()` (added this session) is actually working well in
-practice, not just in the synthetic case it was built for.
+This session's sandbox had **no** outbound network access at all — not just to
+these feed hosts, `WebFetch` failed even on `en.wikipedia.org`. Every check
+above was done by the user opening the URL in their own browser and pasting
+back the raw XML; there was no way to automate or spot-check this from inside
+the sandbox. If verifying feeds again, expect to repeat that manual loop
+unless a future session's network policy is less restrictive.
 
 ## Other things fixed this session (2026-08-13), condensed
 
@@ -164,11 +165,10 @@ practice, not just in the synthetic case it was built for.
 
 ## Open items
 
-1. RSS feed verification checklist above — 8 of 10 feeds still unchecked.
-2. Results workflow needs a real end-to-end test once the season starts and
+1. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return.
-3. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
+2. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
    watch the next few batches of generated posts for a body that still runs
    off the bottom.
-4. Not built: analytics view, feed-health UI (failed feeds only show in the
+3. Not built: analytics view, feed-health UI (failed feeds only show in the
    picker screen's warning banner, nowhere persistent/actionable).
