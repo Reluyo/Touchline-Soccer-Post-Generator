@@ -102,7 +102,7 @@ insert into topics (slug, name, wordmark, style, feeds, ranking_rules) values (
   '{"accent":"#16A39B","accentLight":"#3FD3C8","accentDeep":"#0B6B66"}',
   '[
     {"name":"BBC Sport","url":"https://feeds.bbci.co.uk/sport/football/rss.xml","lang":"en","league":"all"},
-    {"name":"Guardian Football","url":"https://www.theguardian.com/football/rss","lang":"en","league":"all"},
+    {"name":"Guardian Football","url":"https://www.theguardian.com/us/soccer/rss","lang":"en","league":"all"},
     {"name":"Get French Football News","url":"https://www.getfootballnewsfrance.com/feed","lang":"en","league":"ligue1"},
     {"name":"Get Italian Football News","url":"https://www.getfootballnewsitaly.com/feed","lang":"en","league":"seriea"},
     {"name":"Football Italia","url":"https://football-italia.net/feed","lang":"en","league":"seriea"},
