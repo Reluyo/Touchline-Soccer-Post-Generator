@@ -23,7 +23,7 @@ async function recordSeen(db, topicId, slides) {
 // Enforces the "keep at most 3 queued" rule by deleting the oldest.
 export async function POST(request) {
   try {
-    const { topicSlug, slides, kind = 'daily' } = await request.json();
+    const { topicSlug, slides, kind = 'news' } = await request.json();
     const db = supabaseAdmin();
 
     const { data: topic } = await db

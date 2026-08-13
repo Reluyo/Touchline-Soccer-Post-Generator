@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Slide from '@/components/Slide';
 import { captureSlide, downloadDataUrl } from '@/lib/capture';
+import { buildResultSlide } from '@/lib/results';
 
 // The CTA slide is the same "follow us" prompt on every post, so it
 // uses one fixed image rather than generating a new one each run --
@@ -15,6 +16,21 @@ const CTA_IMAGE_URL = 'https://bnasaybdlczxfbifezxz.supabase.co/storage/v1/objec
 function slideText(slide) {
   const headline = (slide.headline_parts || []).map((p) => p.text).join(' ');
   return [headline, slide.body].filter(Boolean).join('. ');
+}
+
+// News candidates are keyed by their story fingerprint, results by the
+// match id from football-data.org -- both already unique per candidate.
+function candidateKey(postType, c) {
+  return postType === 'news' ? c.fingerprint : c.id;
+}
+
+function ageLabel(publishedAt) {
+  const ms = publishedAt ? Date.now() - new Date(publishedAt).getTime() : NaN;
+  if (!Number.isFinite(ms) || ms < 0) return '';
+  const hours = Math.floor(ms / (60 * 60 * 1000));
+  if (hours < 1) return 'just now';
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 async function post(url, body) {
@@ -33,6 +49,11 @@ export default function Dashboard() {
   const [topic, setTopic] = useState(null);
   const [queue, setQueue] = useState([]);
   const [history, setHistory] = useState([]);
+
+  const [postType, setPostType] = useState('news');
+  const [picking, setPicking] = useState(false);
+  const [candidates, setCandidates] = useState([]);
+  const [selected, setSelected] = useState(new Set());
 
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState('');
@@ -63,61 +84,106 @@ export default function Dashboard() {
   useEffect(() => { refresh(); }, [topicSlug]);
 
   // ---------------------------------------------------------------
-  // THE RUN
+  // STAGE 1: find candidates
+  // News fetches feeds; results fetches finished matches from the
+  // last 7 days. Either way this just populates the picker -- nothing
+  // is written or generated until buildPost().
+  // ---------------------------------------------------------------
+  async function findCandidates() {
+    setRunning(true);
+    setError('');
+    setFailedFeeds([]);
+    setCandidates([]);
+    setSelected(new Set());
+    try {
+      if (postType === 'news') {
+        setProgress('Fetching feeds…');
+        const feedData = await post('/api/feeds', { topicSlug });
+        setFailedFeeds(feedData.failedFeeds);
+        if (!feedData.candidates.length) {
+          throw new Error('No fresh stories found. Try again later.');
+        }
+        setCandidates(feedData.candidates);
+      } else {
+        setProgress('Fetching results…');
+        const { matches } = await post('/api/results', {});
+        if (!matches.length) {
+          throw new Error('No finished matches found in the last 7 days.');
+        }
+        setCandidates(matches);
+      }
+      setPicking(true);
+      setProgress('');
+    } catch (err) {
+      setError(String(err.message || err));
+      setProgress('');
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  function toggleSelect(key) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  }
+
+  function cancelPicking() {
+    setPicking(false);
+    setCandidates([]);
+    setSelected(new Set());
+    setError('');
+  }
+
+  // ---------------------------------------------------------------
+  // STAGE 2: build the post from whatever was picked
   // Each step is its own short request. The browser drives the
   // sequence, which is what keeps every call inside Vercel's timeout.
   // Closing this tab mid-run abandons it -- nothing is saved until
   // the final step.
   // ---------------------------------------------------------------
-  async function generate() {
+  async function buildPost() {
+    const chosen = candidates.filter((c) => selected.has(candidateKey(postType, c)));
+    if (!chosen.length) return;
+
     setRunning(true);
     setError('');
-    setFailedFeeds([]);
     try {
-      setProgress('Fetching feeds…');
-      const feedData = await post('/api/feeds', { topicSlug });
-      setFailedFeeds(feedData.failedFeeds);
-
-      if (!feedData.candidates.length) {
-        throw new Error('No fresh stories found. Try again later.');
-      }
-
-      const failedNote = feedData.failedFeeds.length
-        ? ` (${feedData.failedFeeds.length} feed(s) unavailable)`
-        : '';
-      setProgress(`Ranking ${feedData.candidates.length} stories${failedNote}…`);
-
-      const isMonday = new Date().getDay() === 1;
-      const { selected } = await post('/api/rank', {
-        topicSlug,
-        candidates: feedData.candidates,
-        wanted: 7,
-      });
-
-      if (!selected.length) throw new Error('Ranking returned no stories.');
-
       const slides = [];
-      for (let i = 0; i < selected.length; i += 1) {
-        setProgress(`Writing story ${i + 1} of ${selected.length}…`);
-        const { slide } = await post('/api/write', { topicSlug, story: selected[i] });
+      for (let i = 0; i < chosen.length; i += 1) {
+        let slide;
+        if (postType === 'news') {
+          setProgress(`Writing story ${i + 1} of ${chosen.length}…`);
+          const { slide: written } = await post('/api/write', { topicSlug, story: chosen[i] });
+          slide = written;
 
-        // Not every feed item ships a usable photo. Rather than post a
-        // black slide, generate one.
-        if (!slide.image_url) {
-          setProgress(`Generating an image for story ${i + 1} of ${selected.length}…`);
+          // Not every feed item ships a usable photo. Rather than post
+          // a black slide, generate one.
+          if (!slide.image_url) {
+            setProgress(`Generating an image for story ${i + 1} of ${chosen.length}…`);
+            const { image_url } = await post('/api/image', {
+              role: 'story',
+              context: slideText(slide),
+            });
+            slide.image_url = image_url;
+          }
+        } else {
+          slide = buildResultSlide(chosen[i]);
+          setProgress(`Generating an image for match ${i + 1} of ${chosen.length}…`);
           const { image_url } = await post('/api/image', {
             role: 'story',
             context: slideText(slide),
           });
           slide.image_url = image_url;
         }
-
         slides.push({ ...slide, role: 'story' });
       }
 
-      // Cover and CTA never had a photo of their own to reuse -- both
-      // always get an AI-generated background now. The cover illustrates
-      // the lead story so it's not just a generic stadium shot.
+      // Cover and CTA never had a photo of their own to reuse -- the
+      // cover always gets an AI-generated background illustrating the
+      // lead (first-picked) item, and the CTA uses one fixed image.
       setProgress('Generating cover image…');
       const { image_url: coverImage } = await post('/api/image', {
         role: 'cover',
@@ -126,7 +192,7 @@ export default function Dashboard() {
 
       const cover = {
         role: 'cover',
-        headline_parts: isMonday
+        headline_parts: postType === 'results'
           ? [
               { text: 'the', key: false },
               { text: 'biggest matches', key: true },
@@ -158,10 +224,11 @@ export default function Dashboard() {
       setProgress('Writing caption and saving…');
       await post('/api/posts', {
         topicSlug,
-        kind: isMonday ? 'weekend' : 'daily',
+        kind: postType,
         slides: [cover, ...slides, cta],
       });
 
+      cancelPicking();
       setProgress('');
       await refresh();
     } catch (err) {
@@ -251,12 +318,28 @@ export default function Dashboard() {
             value={topicSlug}
             onChange={(e) => setTopicSlug(e.target.value)}
             style={S.select}
-            disabled={running}
+            disabled={running || picking}
           >
             <option value="soccer">European Soccer</option>
           </select>
-          <button onClick={generate} disabled={running} style={S.primaryButton}>
-            {running ? 'Generating…' : 'Generate posts'}
+          <div style={S.segment}>
+            <button
+              onClick={() => setPostType('news')}
+              disabled={running || picking}
+              style={{ ...S.segmentButton, ...(postType === 'news' ? S.segmentButtonActive : {}) }}
+            >
+              News
+            </button>
+            <button
+              onClick={() => setPostType('results')}
+              disabled={running || picking}
+              style={{ ...S.segmentButton, ...(postType === 'results' ? S.segmentButtonActive : {}) }}
+            >
+              Results
+            </button>
+          </div>
+          <button onClick={findCandidates} disabled={running || picking} style={S.primaryButton}>
+            {running && !picking ? 'Finding…' : postType === 'news' ? 'Find stories' : 'Find results'}
           </button>
         </div>
       </header>
@@ -274,11 +357,71 @@ export default function Dashboard() {
         </div>
       )}
 
-      {!activePost && (
+      {picking && !activePost && (
+        <section>
+          <div style={S.pickerHeader}>
+            <h2 style={S.sectionTitle}>
+              {postType === 'news' ? `Pick stories (${candidates.length} found)` : `Pick results (${candidates.length} found)`}
+            </h2>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={cancelPicking} disabled={running} style={S.secondaryButton}>Cancel</button>
+              <button onClick={buildPost} disabled={running || selected.size === 0} style={S.primaryButton}>
+                {running ? 'Building…' : `Build post (${selected.size} selected)`}
+              </button>
+            </div>
+          </div>
+
+          <div style={S.pickerList}>
+            {postType === 'news' ? candidates.map((c) => {
+              const key = candidateKey(postType, c);
+              const isSelected = selected.has(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleSelect(key)}
+                  disabled={running}
+                  style={{ ...S.pickerCard, ...(isSelected ? S.pickerCardSelected : {}) }}
+                >
+                  <div style={S.pickerCheck}>{isSelected ? '✓' : ''}</div>
+                  <div>
+                    <div style={S.cardHeadline}>{c.title}</div>
+                    <div style={S.cardMeta}>{c.sourceName} · {ageLabel(c.publishedAt)}{!c.imageUrl ? ' · no photo' : ''}</div>
+                    {c.summary && <div style={S.pickerSummary}>{c.summary}</div>}
+                  </div>
+                </button>
+              );
+            }) : candidates.map((c) => {
+              const key = candidateKey(postType, c);
+              const isSelected = selected.has(key);
+              return (
+                <button
+                  key={key}
+                  onClick={() => toggleSelect(key)}
+                  disabled={running}
+                  style={{ ...S.pickerCard, ...(isSelected ? S.pickerCardSelected : {}) }}
+                >
+                  <div style={S.pickerCheck}>{isSelected ? '✓' : ''}</div>
+                  <div>
+                    <div style={S.cardHeadline}>
+                      {c.homeTeam} {c.homeScore}-{c.awayScore} {c.awayTeam}
+                    </div>
+                    <div style={S.cardMeta}>
+                      {c.competition}{c.matchday ? ` · Matchday ${c.matchday}` : ''} ·{' '}
+                      {new Date(c.utcDate).toLocaleDateString()}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {!activePost && !picking && (
         <>
           <section>
             <h2 style={S.sectionTitle}>Review queue</h2>
-            {queue.length === 0 && <p style={S.empty}>Nothing waiting. Generate a post to start.</p>}
+            {queue.length === 0 && <p style={S.empty}>Nothing waiting. Find stories or results to start.</p>}
             <div style={S.grid}>
               {queue.map((p) => (
                 <button
@@ -287,7 +430,7 @@ export default function Dashboard() {
                   style={S.card}
                 >
                   <div style={S.cardMeta}>
-                    {p.kind === 'weekend' ? 'Weekend round-up' : 'Daily'} ·{' '}
+                    {p.kind === 'results' ? 'Results' : 'News'} ·{' '}
                     {new Date(p.created_at).toLocaleDateString()}
                   </div>
                   <div style={S.cardHeadline}>
@@ -427,6 +570,12 @@ const styles = {
   controls: { display: 'flex', gap: 12, alignItems: 'center' },
   select: { background: '#171B1C', color: '#E8ECEC', border: '1px solid #2a2f30',
             borderRadius: 8, padding: '10px 12px', fontSize: 14 },
+  segment: { display: 'flex', background: '#171B1C', border: '1px solid #2a2f30',
+             borderRadius: 8, padding: 3, gap: 2 },
+  segmentButton: { background: 'none', border: 'none', color: '#8B9797',
+                   borderRadius: 6, padding: '7px 14px', fontSize: 13.5,
+                   fontWeight: 600, cursor: 'pointer' },
+  segmentButtonActive: { background: '#16A39B', color: '#04211F' },
   primaryButton: { background: '#16A39B', color: '#04211F', border: 'none',
                    borderRadius: 8, padding: '10px 18px', fontSize: 14,
                    fontWeight: 600, cursor: 'pointer' },
@@ -448,6 +597,17 @@ const styles = {
           padding: 16, textAlign: 'left', cursor: 'pointer', color: '#E8ECEC' },
   cardMeta: { fontSize: 12, color: '#6E7A7A', marginBottom: 6 },
   cardHeadline: { fontSize: 15, lineHeight: 1.35, marginBottom: 8 },
+  pickerHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  flexWrap: 'wrap', gap: 12, marginBottom: 14 },
+  pickerList: { display: 'flex', flexDirection: 'column', gap: 8 },
+  pickerCard: { display: 'flex', gap: 12, alignItems: 'flex-start', width: '100%',
+                background: '#171B1C', border: '1px solid #2a2f30', borderRadius: 10,
+                padding: '14px 16px', textAlign: 'left', cursor: 'pointer', color: '#E8ECEC' },
+  pickerCardSelected: { borderColor: '#16A39B', background: '#12211F' },
+  pickerCheck: { width: 22, height: 22, borderRadius: 5, border: '1px solid #2a2f30',
+                 flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                 fontSize: 14, color: '#3FD3C8', marginTop: 2 },
+  pickerSummary: { fontSize: 13, color: '#8B9797', lineHeight: 1.45 },
   reviewLayout: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px,380px)', gap: 28 },
   thumbRow: { display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' },
   thumb: { width: 34, height: 34, borderRadius: 6, background: '#171B1C',

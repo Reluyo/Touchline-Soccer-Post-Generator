@@ -31,8 +31,8 @@ create table posts (
   topic_id    uuid not null references topics(id) on delete cascade,
   status      text not null default 'draft'
               check (status in ('draft','queued','approved')),
-  kind        text not null default 'daily'
-              check (kind in ('daily','weekend')),  -- weekend = Monday round-up
+  kind        text not null default 'news'
+              check (kind in ('news','results')),   -- results = match-score roundup
   caption     text,
   approved_at timestamptz,
   created_at  timestamptz default now()

@@ -3,9 +3,14 @@ import { fetchAllFeeds } from '@/lib/feeds';
 import { filterItems, dedupe, removeSeen } from '@/lib/filter';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// Candidates feed the picker screen, not an automatic ranker -- cap it
+// well above what anyone would actually pick so the list stays
+// readable, freshest first.
+const MAX_CANDIDATES = 50;
+
 // Stage 1 of a run. Fetches every feed in parallel, filters, dedupes,
-// and drops anything already posted. Returns candidates to the browser,
-// which passes them to /api/rank next.
+// and drops anything already posted. Returns candidates to the browser
+// for manual selection.
 export async function POST(request) {
   try {
     const { topicSlug } = await request.json();
@@ -24,7 +29,9 @@ export async function POST(request) {
 
     const filtered = filterItems(items);
     const deduped = dedupe(filtered);
-    const fresh = removeSeen(deduped, (seen || []).map((s) => s.fingerprint));
+    const fresh = removeSeen(deduped, (seen || []).map((s) => s.fingerprint))
+      .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0))
+      .slice(0, MAX_CANDIDATES);
 
     return NextResponse.json({
       topic: { id: topic.id, name: topic.name, wordmark: topic.wordmark, style: topic.style },
