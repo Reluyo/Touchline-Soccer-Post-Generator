@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchAllFeeds } from '@/lib/feeds';
 import { filterItems, dedupe, removeSeen } from '@/lib/filter';
+import { translateCandidates } from '@/lib/claude';
 import { supabaseAdmin } from '@/lib/supabase';
 
 // Candidates feed the picker screen, not an automatic ranker -- cap it
@@ -33,9 +34,19 @@ export async function POST(request) {
       .sort((a, b) => new Date(b.publishedAt || 0) - new Date(a.publishedAt || 0))
       .slice(0, MAX_CANDIDATES);
 
+    // The picker shows title/summary as-is (no per-story AI polish, to
+    // keep this cheap) -- but an untranslated German or French snippet
+    // isn't something you can actually skim and pick from. One batched
+    // call over just the non-English candidates fixes that without
+    // paying for 50 individual translations.
+    const nonEnglish = fresh.filter((c) => c.lang && c.lang !== 'en');
+    const translated = nonEnglish.length ? await translateCandidates(nonEnglish) : [];
+    const byOriginal = new Map(nonEnglish.map((c, i) => [c, translated[i]]));
+    const localized = fresh.map((c) => byOriginal.get(c) || c);
+
     return NextResponse.json({
       topic: { id: topic.id, name: topic.name, wordmark: topic.wordmark, style: topic.style },
-      candidates: fresh,
+      candidates: localized,
       stats: { fetched: items.length, afterFilter: filtered.length,
                afterDedupe: deduped.length, afterSeen: fresh.length },
       failedFeeds: failed,
