@@ -24,6 +24,7 @@ const ALLOWED_HOSTS = [
   'football-italia.net', 'football-espana.net',
   'derivates.kicker.de', 'kicker.de',
   'medias.lequipe.fr',
+  'as.com',
 ];
 
 // Generated slide backgrounds live in our own Supabase Storage bucket
