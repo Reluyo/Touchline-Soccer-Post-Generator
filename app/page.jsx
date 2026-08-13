@@ -4,6 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import Slide from '@/components/Slide';
 import { captureSlide, downloadDataUrl } from '@/lib/capture';
 
+// Turns a written slide's copy into the plain-text description the
+// image generator uses to depict the real people and clubs in that story.
+function slideText(slide) {
+  const headline = (slide.headline_parts || []).map((p) => p.text).join(' ');
+  return [headline, slide.body].filter(Boolean).join('. ');
+}
+
 async function post(url, body) {
   const res = await fetch(url, {
     method: 'POST',
@@ -89,7 +96,10 @@ export default function Dashboard() {
         // black slide, generate one.
         if (!slide.image_url) {
           setProgress(`Generating an image for story ${i + 1} of ${selected.length}…`);
-          const { image_url } = await post('/api/image', { role: 'story' });
+          const { image_url } = await post('/api/image', {
+            role: 'story',
+            context: slideText(slide),
+          });
           slide.image_url = image_url;
         }
 
@@ -97,9 +107,13 @@ export default function Dashboard() {
       }
 
       // Cover and CTA never had a photo of their own to reuse -- both
-      // always get an AI-generated background now.
+      // always get an AI-generated background now. The cover illustrates
+      // the lead story so it's not just a generic stadium shot.
       setProgress('Generating cover image…');
-      const { image_url: coverImage } = await post('/api/image', { role: 'cover' });
+      const { image_url: coverImage } = await post('/api/image', {
+        role: 'cover',
+        context: slideText(slides[0]),
+      });
 
       const cover = {
         role: 'cover',

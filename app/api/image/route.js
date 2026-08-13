@@ -10,8 +10,8 @@ export const maxDuration = 60;
 // consistent with the rest of the run -- see /api/write.
 export async function POST(request) {
   try {
-    const { role } = await request.json();
-    const image_url = await generateSlideImage({ role });
+    const { role, context } = await request.json();
+    const image_url = await generateSlideImage({ role, context });
     return NextResponse.json({ image_url });
   } catch (err) {
     return NextResponse.json({ error: String(err.message || err) }, { status: 500 });

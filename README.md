@@ -88,12 +88,20 @@ html2canvas was 4.90% off and visibly broken. Don't swap the library.
 `document.fonts.ready` and explicitly loads Anton and Barlow Condensed.
 Skipping this produces slides in Arial.
 
-**Why generated images are generic.** `lib/images.js` prompts deliberately
-avoid named athletes, club crests, and sponsor logos — a cover or CTA
-slide trading on a real person's likeness or someone else's trademark is
-a legal problem this account doesn't need. The images are photoreal
-football mood shots (silhouettes, boot strikes, empty stadiums), not
-depictions of anyone specific.
+**Generated images name real players, clubs, crests, and sponsors on
+purpose.** `lib/images.js` builds the prompt for a story slide (and the
+cover, which illustrates the lead story) straight from that slide's own
+headline and body, and explicitly asks for the real people, kits, crests,
+and sponsor branding involved — a deliberate choice to maximize realism,
+made knowingly accepting the tradeoffs: real-person likeness without
+consent raises publicity-rights exposure, real crests/logos raise
+trademark exposure, and OpenAI's own usage policy restricts photorealistic
+real people and brand logos, so `gpt-image-1` may refuse or alter these
+prompts unpredictably. If a run's image generation starts failing outright,
+this is the first thing to check — a prompt policy rejection reads like
+any other `OpenAI image API` error in the run's error banner. The CTA has
+no single story to illustrate, so it stays a generic close-up (real
+boot/ball branding, no specific player).
 
 **Why generated images live in Supabase Storage, not the DB.** OpenAI's
 image response is either a data URL or a base64 blob — neither is
