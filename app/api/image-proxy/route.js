@@ -18,7 +18,7 @@ import { NextResponse } from 'next/server';
 const ALLOWED_HOSTS = [
   'ichef.bbci.co.uk', 'bbci.co.uk',
   'i.guim.co.uk', 'media.guim.co.uk',
-  'phantom-marca.uecdn.es', 'e00-marca.uecdn.es',
+  'objetos.estaticos-marca.com',
   'getfootballnewsfrance.com', 'www.getfootballnewsfrance.com',
   'getfootballnewsitaly.com', 'www.getfootballnewsitaly.com',
   'football-italia.net', 'football-espana.net',

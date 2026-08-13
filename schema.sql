@@ -107,7 +107,7 @@ insert into topics (slug, name, wordmark, style, feeds, ranking_rules) values (
     {"name":"Get Italian Football News","url":"https://www.getfootballnewsitaly.com/feed","lang":"en","league":"seriea"},
     {"name":"Football Italia","url":"https://football-italia.net/feed","lang":"en","league":"seriea"},
     {"name":"Football Espana","url":"https://football-espana.net/feed","lang":"en","league":"laliga"},
-    {"name":"Marca","url":"https://e00-marca.uecdn.es/rss/en/index.xml","lang":"en","league":"laliga"},
+    {"name":"Marca","url":"https://objetos.estaticos-marca.com/rss/futbol/primera-division.xml","lang":"es","league":"laliga"},
     {"name":"kicker","url":"https://newsfeed.kicker.de/news/bundesliga","lang":"de","league":"bundesliga"},
     {"name":"LEquipe","url":"https://dwh.lequipe.fr/api/edito/rss?path=/Football/","lang":"fr","league":"ligue1"},
     {"name":"AS.com","url":"https://feeds.as.com/mrss-s/pages/futbol","lang":"es","league":"laliga"}
