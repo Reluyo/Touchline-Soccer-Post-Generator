@@ -31,6 +31,7 @@ export default function Dashboard() {
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState('');
+  const [failedFeeds, setFailedFeeds] = useState([]);
 
   const [activePost, setActivePost] = useState(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
@@ -65,9 +66,11 @@ export default function Dashboard() {
   async function generate() {
     setRunning(true);
     setError('');
+    setFailedFeeds([]);
     try {
       setProgress('Fetching feeds…');
       const feedData = await post('/api/feeds', { topicSlug });
+      setFailedFeeds(feedData.failedFeeds);
 
       if (!feedData.candidates.length) {
         throw new Error('No fresh stories found. Try again later.');
@@ -257,6 +260,11 @@ export default function Dashboard() {
 
       {progress && <div style={S.progress}>{progress}</div>}
       {error && <div style={S.error}>{error}</div>}
+      {failedFeeds.length > 0 && (
+        <div style={S.warning}>
+          {failedFeeds.map((f) => `${f.source}: ${f.error}`).join(' · ')}
+        </div>
+      )}
       {running && (
         <div style={S.warning}>
           Keep this tab open. Closing it cancels the run and nothing is saved.
