@@ -2,6 +2,24 @@ import { NextResponse } from 'next/server';
 import { writeCaption } from '@/lib/claude';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// Record story fingerprints as seen so a future run won't re-select them.
+// Called both when a post is queued and when it's approved -- queuing is
+// what actually stops a re-run from picking the same story again (nothing
+// else does), approval is a belt-and-suspenders repeat for posts created
+// before this existed. Cover/CTA slides have no fingerprint and are skipped.
+async function recordSeen(db, topicId, slides) {
+  const seen = (slides || [])
+    .filter((s) => s.fingerprint)
+    .map((s) => ({
+      topic_id: topicId,
+      fingerprint: s.fingerprint,
+      headline: (s.headline_parts || []).map((p) => p.text).join(' '),
+    }));
+  if (seen.length) {
+    await db.from('seen_stories').upsert(seen, { onConflict: 'topic_id,fingerprint' });
+  }
+}
+
 // Save a finished draft into the review queue.
 // Enforces the "keep at most 3 queued" rule by deleting the oldest.
 export async function POST(request) {
@@ -27,11 +45,13 @@ export async function POST(request) {
       headline_parts: s.headline_parts,
       body: s.body,
       image_url: s.image_url,
+      image_urls: s.image_urls || [],
       source_name: s.source_name,
       source_url: s.source_url,
       fingerprint: s.fingerprint || null,
     }));
     await db.from('slides').insert(rows);
+    await recordSeen(db, topic.id, rows);
 
     // Trim the queue to the three newest.
     const { data: queued } = await db
@@ -79,8 +99,9 @@ export async function GET(request) {
   }
 }
 
-// Approve a post: mark it approved and record its stories as seen so
-// they never come back in a future run.
+// Approve a post: mark it approved. Its stories were already recorded as
+// seen when the post was queued (see recordSeen above) -- this is a
+// no-op repeat of that for safety, not the primary mechanism.
 export async function PATCH(request) {
   try {
     const { postId } = await request.json();
@@ -93,19 +114,7 @@ export async function PATCH(request) {
       .update({ status: 'approved', approved_at: new Date().toISOString() })
       .eq('id', postId);
 
-    // Record the STORY fingerprint (not the slide's own uuid) so a
-    // future run can recognise the same story arriving from any outlet.
-    // Cover and CTA slides have no fingerprint and are skipped.
-    const seen = (post.slides || [])
-      .filter((s) => s.fingerprint)
-      .map((s) => ({
-        topic_id: post.topic_id,
-        fingerprint: s.fingerprint,
-        headline: (s.headline_parts || []).map((p) => p.text).join(' '),
-      }));
-    if (seen.length) {
-      await db.from('seen_stories').upsert(seen, { onConflict: 'topic_id,fingerprint' });
-    }
+    await recordSeen(db, post.topic_id, post.slides);
 
     // Keep only the five most recent approved posts.
     const { data: approved } = await db

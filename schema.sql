@@ -55,7 +55,8 @@ create table slides (
                  check (role in ('cover','story','cta')),
   headline_parts jsonb not null default '[]',
   body           text,
-  image_url      text,        -- original URL at the source
+  image_url      text,        -- original URL at the source (single fallback)
+  image_urls     jsonb not null default '[]', -- cover-slide collage, up to 4 photo URLs
   source_name    text,        -- single credited outlet
   source_url     text,
   fingerprint    text,        -- story fingerprint, used by seen_stories

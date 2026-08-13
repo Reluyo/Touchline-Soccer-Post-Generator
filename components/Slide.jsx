@@ -27,6 +27,18 @@ export default function Slide({
 
   const isCover = slide.role === 'cover' || slide.role === 'cta';
   const image = proxied(slide.image_url);
+  const collageUrls = slide.role === 'cover'
+    ? (slide.image_urls || []).filter(Boolean).slice(0, 4)
+    : [];
+
+  // Grid layout per photo count: 1 = full bleed, 2 = side by side,
+  // 3 = one large + two stacked, 4 = even 2x2.
+  const collageGrid = {
+    2: { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr' },
+    3: { gridTemplateColumns: '1.4fr 1fr', gridTemplateRows: '1fr 1fr', gridTemplateAreas: '"a b" "a c"' },
+    4: { gridTemplateColumns: '1fr 1fr', gridTemplateRows: '1fr 1fr' },
+  }[collageUrls.length];
+  const collageAreas = collageUrls.length === 3 ? ['a', 'b', 'c'] : [];
 
   const keyGradient = {
     backgroundImage: `linear-gradient(168deg, ${accentLight} 0%, ${accent} 38%, ${accentDeep} 72%, ${accent} 100%)`,
@@ -59,17 +71,33 @@ export default function Slide({
         }}
       >
         {/* Photo fills the top 78%, fading to black behind the text */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: '0 0 auto 0',
-            height: '78%',
-            backgroundImage: image ? `url(${image})` : 'none',
-            backgroundColor: image ? undefined : '#111',
-            backgroundSize: 'cover',
-            backgroundPosition: 'center',
-          }}
-        >
+        <div style={{ position: 'absolute', inset: '0 0 auto 0', height: '78%' }}>
+          {collageUrls.length > 1 ? (
+            <div style={{ position: 'absolute', inset: 0, display: 'grid', gap: 2, ...collageGrid }}>
+              {collageUrls.map((url, i) => (
+                <div
+                  key={url}
+                  style={{
+                    gridArea: collageAreas[i],
+                    backgroundImage: `url(${proxied(url)})`,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                backgroundImage: image ? `url(${image})` : 'none',
+                backgroundColor: image ? undefined : '#111',
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }}
+            />
+          )}
           <div
             style={{
               position: 'absolute',

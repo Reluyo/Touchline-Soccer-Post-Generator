@@ -87,7 +87,8 @@ export default function Dashboard() {
         slides.push({ ...slide, role: 'story' });
       }
 
-      // Cover reuses the strongest story's photo.
+      // Cover is a collage of up to 4 of the day's story photos.
+      const coverImages = slides.map((s) => s.image_url).filter(Boolean).slice(0, 4);
       const cover = {
         role: 'cover',
         headline_parts: isMonday
@@ -104,7 +105,8 @@ export default function Dashboard() {
               { text: 'today?', key: false },
             ],
         body: null,
-        image_url: slides[0]?.image_url || null,
+        image_url: coverImages[0] || null,
+        image_urls: coverImages,
       };
 
       const cta = {
