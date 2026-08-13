@@ -12,7 +12,9 @@ via chat, approve, download the PNGs, and post them yourself.
 
 1. Create a free project at supabase.com.
 2. Open **SQL Editor → New query**, paste all of `schema.sql`, click **Run**.
-   This creates the tables and seeds the soccer topic with its feeds.
+   This creates the tables, seeds the soccer topic with its feeds, and
+   creates the `generated-images` storage bucket used for AI-generated
+   slide backgrounds.
 3. Go to **Project Settings → Data API** and copy the Project URL.
 4. Go to **Project Settings → API Keys** and copy the `service_role` key.
 
@@ -21,19 +23,27 @@ via chat, approve, download the PNGs, and post them yourself.
 Get a key from console.anthropic.com. It needs credit on the account —
 a run costs a few cents.
 
-### 3. Local
+### 3. OpenAI
+
+Get a key from platform.openai.com. Used to generate the cover, the CTA,
+and any story slide whose feed item had no usable photo. Your
+organization must be verified (**Settings → Organization → Verify**)
+before `gpt-image-1` will generate images — this is an OpenAI account
+setting, not something this app can work around.
+
+### 4. Local
 
 ```bash
 npm install
-cp .env.example .env.local     # then fill in the three values
+cp .env.example .env.local     # then fill in the four values
 npm run dev
 ```
 
 Open http://localhost:3000
 
-### 4. Deploy
+### 5. Deploy
 
-Push to GitHub, import the repo at vercel.com, and add the same three
+Push to GitHub, import the repo at vercel.com, and add the same four
 environment variables under **Settings → Environment Variables**. Deploy.
 
 ---
@@ -48,10 +58,13 @@ your browser:
 | 1 | `/api/feeds` | Fetches all feeds in parallel, filters, dedupes |
 | 2 | `/api/rank` | One Claude call picks the best stories |
 | 3 | `/api/write` | One call per story — writes headline and body |
+| 3b | `/api/image` | One call per image needed — the cover, the CTA, and any story slide whose feed item had no photo |
 | 4 | `/api/posts` | Writes the caption, saves the draft to the queue |
 
-Each request finishes well inside Vercel's timeout. **Keep the tab open** —
-nothing is saved until step 4, so closing it mid-run means starting over.
+Each request finishes well inside Vercel's timeout, except `/api/image` —
+image generation genuinely takes 10-30s, so that route sets
+`maxDuration = 60`. **Keep the tab open** — nothing is saved until step 4,
+so closing it mid-run means starting over.
 
 ---
 
@@ -74,6 +87,19 @@ html2canvas was 4.90% off and visibly broken. Don't swap the library.
 **Fonts must load before capture.** `lib/capture.js` waits on
 `document.fonts.ready` and explicitly loads Anton and Barlow Condensed.
 Skipping this produces slides in Arial.
+
+**Why generated images are generic.** `lib/images.js` prompts deliberately
+avoid named athletes, club crests, and sponsor logos — a cover or CTA
+slide trading on a real person's likeness or someone else's trademark is
+a legal problem this account doesn't need. The images are photoreal
+football mood shots (silhouettes, boot strikes, empty stadiums), not
+depictions of anyone specific.
+
+**Why generated images live in Supabase Storage, not the DB.** OpenAI's
+image response is either a data URL or a base64 blob — neither is
+something you want sitting in a text column or a temporary link that
+expires. `lib/images.js` uploads the PNG to the `generated-images`
+bucket and stores the public URL, same shape as any other `image_url`.
 
 ---
 

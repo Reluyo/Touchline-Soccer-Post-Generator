@@ -84,11 +84,23 @@ export default function Dashboard() {
       for (let i = 0; i < selected.length; i += 1) {
         setProgress(`Writing story ${i + 1} of ${selected.length}…`);
         const { slide } = await post('/api/write', { topicSlug, story: selected[i] });
+
+        // Not every feed item ships a usable photo. Rather than post a
+        // black slide, generate one.
+        if (!slide.image_url) {
+          setProgress(`Generating an image for story ${i + 1} of ${selected.length}…`);
+          const { image_url } = await post('/api/image', { role: 'story' });
+          slide.image_url = image_url;
+        }
+
         slides.push({ ...slide, role: 'story' });
       }
 
-      // Cover is a collage of up to 4 of the day's story photos.
-      const coverImages = slides.map((s) => s.image_url).filter(Boolean).slice(0, 4);
+      // Cover and CTA never had a photo of their own to reuse -- both
+      // always get an AI-generated background now.
+      setProgress('Generating cover image…');
+      const { image_url: coverImage } = await post('/api/image', { role: 'cover' });
+
       const cover = {
         role: 'cover',
         headline_parts: isMonday
@@ -105,9 +117,11 @@ export default function Dashboard() {
               { text: 'today?', key: false },
             ],
         body: null,
-        image_url: coverImages[0] || null,
-        image_urls: coverImages,
+        image_url: coverImage,
       };
+
+      setProgress('Generating closing image…');
+      const { image_url: ctaImage } = await post('/api/image', { role: 'cta' });
 
       const cta = {
         role: 'cta',
@@ -118,7 +132,7 @@ export default function Dashboard() {
           { text: "you don't follow us", key: true },
         ],
         body: null,
-        image_url: null,
+        image_url: ctaImage,
       };
 
       setProgress('Writing caption and saving…');
