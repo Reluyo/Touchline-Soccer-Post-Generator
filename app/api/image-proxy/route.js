@@ -24,7 +24,10 @@ const ALLOWED_HOSTS = [
   'football-italia.net', 'football-espana.net',
   'derivates.kicker.de', 'kicker.de',
   'medias.lequipe.fr',
-  'as.com',
+  // as.com covers vdmedia.as.com (video stills); AS.com's actual photo
+  // CDN is a completely different domain (epimg.net, not as.com) so it
+  // needs its own entry -- suffix-matching "as.com" alone can't reach it.
+  'as.com', 'img.asmedia.epimg.net',
 ];
 
 // Generated slide backgrounds live in our own Supabase Storage bucket
