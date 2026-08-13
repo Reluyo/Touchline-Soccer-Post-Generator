@@ -26,7 +26,19 @@ const ALLOWED_HOSTS = [
   'medias.lequipe.fr',
 ];
 
+// Generated slide backgrounds live in our own Supabase Storage bucket
+// (see lib/images.js), so that project's host is always trusted --
+// no need to hardcode it alongside the news outlets below.
+function supabaseHost() {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname;
+  } catch {
+    return null;
+  }
+}
+
 function hostAllowed(hostname) {
+  if (hostname === supabaseHost()) return true;
   return ALLOWED_HOSTS.some((h) => hostname === h || hostname.endsWith(`.${h}`));
 }
 

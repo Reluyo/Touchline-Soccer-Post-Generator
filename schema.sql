@@ -81,6 +81,17 @@ create table seen_stories (
 create unique index seen_topic_fingerprint_idx on seen_stories (topic_id, fingerprint);
 
 -- ---------------------------------------------------------------
+-- STORAGE
+-- Bucket for AI-generated slide backgrounds: the cover, the CTA, and
+-- any story slide whose feed item had no usable photo. Public so the
+-- browser can load them directly (through /api/image-proxy, same as
+-- any other slide image) without needing a signed URL.
+-- ---------------------------------------------------------------
+insert into storage.buckets (id, name, public)
+values ('generated-images', 'generated-images', true)
+on conflict (id) do nothing;
+
+-- ---------------------------------------------------------------
 -- Seed the soccer topic
 -- ---------------------------------------------------------------
 insert into topics (slug, name, wordmark, style, feeds, ranking_rules) values (
