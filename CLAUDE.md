@@ -74,11 +74,14 @@ This replaced the old "click one button, Claude auto-ranks and builds the
 whole carousel" flow. Full detail in README; short version:
 
 1. Pick **News** or **Results**, click **Find stories**/**Find results**.
-   - News: `/api/feeds` returns up to 50 recent candidates (filtered, deduped,
-     freshness-checked, non-English ones auto-translated for display).
+   - News: `/api/feeds` fetches everything from the last 7 days (filtered,
+     deduped, freshness-checked), ranks the whole pool by newsworthiness via
+     `rankStories()` (2026-08-14 change — see below), and returns the top
+     100, non-English ones auto-translated for display.
    - Results: `/api/results` returns finished matches from the last 7 days
      across `PL,PD,SA,BL1,FL1,CL` (football-data.org competition codes).
-2. Manually check which candidates to use — no automatic ranking anymore.
+2. Manually check which candidates to use — ranking only orders/trims the
+   list the picker shows; it never selects or builds anything by itself.
 3. Click **Build post**: News stories go through `/api/write` (Claude writes
    headline+body) same as before; Results slides are templated directly from
    the scoreline in `lib/results.js`'s `buildResultSlide()` — no Claude call,
@@ -98,8 +101,44 @@ whole carousel" flow. Full detail in README; short version:
    closing slide.
 5. Caption + save, same as before.
 
-`/api/rank` and `lib/claude.js`'s `rankStories` were deleted — nothing calls
-them anymore.
+The standalone `/api/rank` endpoint from the old auto-generate flow is still
+gone. `rankStories()` was reintroduced in `lib/claude.js` (2026-08-14,
+fourth session — see below) but only as a step inside `/api/feeds`, not a
+separate call the browser makes — it's still the human picking from
+`/api/feeds`'s output, never an automatic build.
+
+## Widening the picker to a week, with ranking (2026-08-14, fourth session)
+
+User reported only seeing stories from the last ~3 hours. Root cause:
+`filterItems()`'s 24h freshness window wasn't the problem (it was already
+24h, not 3) — the real culprit was `/api/feeds` sorting freshest-first and
+slicing to `MAX_CANDIDATES` (50) *before* any notion of importance. On a
+busy news day, the freshest 50 items across 10 feeds can all land within
+a couple of hours of each other, silently pushing anything older off the
+list even though it was well within the 24h window.
+
+Fix, both in `app/api/feeds/route.js`:
+- `MAX_AGE_HOURS` raised from 24 to `24 * 7` (a full week) — passed
+  explicitly to `filterItems()`, which still defaults to 24h for any other
+  caller.
+- `MAX_CANDIDATES` raised from 50 to 100.
+- New `rankStories()` in `lib/claude.js` reintroduces newsworthiness
+  ranking (using the same `topics.ranking_rules` text the old deleted
+  auto-generate flow used), but strictly to order/trim the pool the picker
+  shows — it returns every story it's given, just reordered, and the route
+  slices to the top 100 *after* ranking instead of before. The user still
+  manually picks from that list; nothing here auto-selects or builds a
+  post. If ranking itself fails (Claude API error, bad JSON), the route
+  falls back to a plain freshest-first sort rather than failing the whole
+  request — same never-throw posture as the rest of the pipeline.
+- Added `export const maxDuration = 60` to the route, matching
+  `/api/image` — ranking a few hundred stories in one Claude call is
+  slower than the plain fetch this route used to be, and the previous
+  version had no explicit duration (relying on Vercel's short default).
+
+Not yet load-tested against a real high-volume week (transfer deadline
+day, a full round of European fixtures) — worth watching whether ranking
+a genuinely large pool (300+) stays fast and within `maxDuration`.
 
 ## Cutting down AI image generation (2026-08-14, third session)
 
@@ -232,3 +271,6 @@ unless a future session's network policy is less restrictive.
    off the bottom.
 3. Not built: analytics view, feed-health UI (failed feeds only show in the
    picker screen's warning banner, nowhere persistent/actionable).
+4. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+   tested against a real high-volume week — watch whether it stays fast
+   enough and within `/api/feeds`'s `maxDuration = 60`.

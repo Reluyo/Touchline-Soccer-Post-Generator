@@ -5,11 +5,13 @@ Generates European football carousels for Instagram. You choose **News** or
 ones make the cut, and it writes the slides and puts a draft in a review
 queue. You edit via chat, approve, download the PNGs, and post them yourself.
 
-There's no automatic story-ranking anymore — you curate every post by hand
-from a pool of candidates. A **News** post pulls up to 50 recent stories from
-the RSS feeds; a **Results** post pulls finished matches from the last 7 days
-across the big-five leagues and the Champions League. Either way, nothing
-gets written or generated until you've picked which candidates to use.
+You curate every post by hand from a pool of candidates — ranking only
+decides what the picker shows you, it never auto-builds a post. A **News**
+post pulls stories from the last 7 days across the RSS feeds, ranks the
+whole pool by newsworthiness, and shows you the top 100; a **Results** post
+pulls finished matches from the last 7 days across the big-five leagues and
+the Champions League. Either way, nothing gets written or generated until
+you've picked which candidates to use.
 
 ---
 
@@ -161,9 +163,11 @@ values ('f1', 'Formula 1', 'Apex',
         '[{"name":"...","url":"...","lang":"en","league":"all"}]');
 ```
 
-(`ranking_rules` is a leftover column from the old auto-ranking step — it's
-not read anywhere anymore, since candidate selection is manual now. Fine to
-leave null.)
+(`ranking_rules` feeds `lib/claude.js`'s `rankStories()`, which orders the
+picker's candidate list by newsworthiness — plain English works fine, see
+the `soccer` topic's row for an example. Leaving it null is fine too;
+`rankStories()` falls back to a generic "bigger clubs and completed news
+outrank smaller clubs and rumours" rule for that topic.)
 
 Then add the option to the dropdown in `app/page.jsx`, and add the new feeds'
 image hosts to the allowlist in `app/api/image-proxy/route.js`.
