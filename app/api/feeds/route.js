@@ -5,9 +5,9 @@ import { translateCandidates, rankStories } from '@/lib/claude';
 import { supabaseAdmin } from '@/lib/supabase';
 
 // Ranking the full week's pool (potentially a few hundred stories) is
-// slower than a plain fetch -- give this route the same extended
-// duration as /api/image rather than risk Vercel's 10s default.
-export const maxDuration = 60;
+// slower than a plain fetch -- translation batches + Claude ranking can
+// easily exceed 60s on busy news days. 120s gives enough headroom.
+export const maxDuration = 120;
 
 // Look back a full week, not just a day -- a freshness-only sort was
 // burying real stories under whatever happened to break in the last few
