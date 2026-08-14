@@ -91,8 +91,9 @@ export default function Slide({
               style={{
                 position: 'absolute',
                 inset: 0,
-                backgroundImage: image ? `url(${image})` : 'none',
-                backgroundColor: image ? undefined : '#111',
+                backgroundImage: image
+                  ? `url(${image})`
+                  : `linear-gradient(155deg, ${accentLight} 0%, ${accent} 45%, ${accentDeep} 100%)`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
               }}

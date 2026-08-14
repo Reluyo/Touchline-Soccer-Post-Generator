@@ -71,14 +71,55 @@ whole carousel" flow. Full detail in README; short version:
    headline+body) same as before; Results slides are templated directly from
    the scoreline in `lib/results.js`'s `buildResultSlide()` — no Claude call,
    the "content" is just team names and a score.
-4. Cover gets an AI-generated image illustrating the first-picked item. **CTA
-   is one fixed, hand-picked image** (`CTA_IMAGE_URL` constant in
-   `app/page.jsx`) — not regenerated per run, the user asked for visual
-   consistency on the closing slide.
+4. Cover reuses the lead (first-picked) story's own image — a real feed
+   photo when there is one, otherwise the AI fallback already generated
+   for that story slide. AI generation is only ever invoked as a News
+   story-slide fallback when the feed item had no photo; Results slides
+   (and a Results post's cover) have no photo source at all and render a
+   branded gradient instead (2026-08-14 change — see "Cutting down AI
+   image generation" below). **CTA is one fixed, hand-picked image**
+   (`CTA_IMAGE_URL` constant in `app/page.jsx`) — not regenerated per
+   run, the user asked for visual consistency on the closing slide.
 5. Caption + save, same as before.
 
 `/api/rank` and `lib/claude.js`'s `rankStories` were deleted — nothing calls
 them anymore.
+
+## Cutting down AI image generation (2026-08-14, third session)
+
+User asked to move away from AI-generated slide images since most feed
+stories already ship a real photo. Two changes, both in `app/page.jsx`'s
+`buildPost()`:
+
+- **Results slides no longer call `/api/image` at all.**
+  football-data.org gives team names and a score, not a photo, so there
+  was never a real image to fall back to — previously this meant *every*
+  Results slide was AI-generated. Now `buildResultSlide()`'s slide is
+  used as-is with no `image_url`, and `Slide.jsx` renders a branded
+  gradient (`accentLight → accent → accentDeep` from `topics.style`)
+  instead of a photo when `image_url` is empty. This applies to a
+  Results post's cover too.
+- **The cover no longer gets its own generated image.** It now reuses
+  `slides[0].image_url` directly — for News that's the real feed photo,
+  or the AI fallback already generated for that story slide if the feed
+  had none; for Results it's `null`, which falls through to the same
+  gradient treatment. Net effect: a full Results post now does zero
+  OpenAI image calls; a News post only calls it for feed items missing a
+  photo, and never twice for the same story.
+
+Tradeoff worth knowing: when the lead story needed the AI fallback (no
+feed photo), the cover and the first story slide now show the *exact
+same* image back-to-back in the carousel, since both reuse
+`slides[0].image_url`. Not addressed — flagged here in case it reads as
+repetitive in practice and is worth revisiting (e.g. a different crop,
+or accepting AI generation just for the cover in that one case).
+
+Also updated `lib/images.js` this session (separate fix, same theme):
+when OpenAI's moderation blocks a prompt naming real players/clubs
+(`moderation_block`), `generateSlideImage()` now retries once with the
+generic `FALLBACK_PROMPT` instead of failing the whole build — previously
+one flagged story killed the entire run since nothing saves until the
+last step.
 
 ## RSS feed verification — DONE (2026-08-13, second session)
 

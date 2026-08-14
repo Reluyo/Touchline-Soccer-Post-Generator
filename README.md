@@ -111,24 +111,34 @@ html2canvas was 4.90% off and visibly broken. Don't swap the library.
 `document.fonts.ready` and explicitly loads Anton and Barlow Condensed.
 Skipping this produces slides in Arial.
 
-**Generated images name real players, clubs, crests, and sponsors on
-purpose.** `lib/images.js` builds the prompt for a story/result slide (and
-the cover, which illustrates the first-picked item) straight from that
-slide's own headline and body, and explicitly asks for the real people,
-kits, crests, and sponsor branding involved — a deliberate choice to
-maximize realism, made knowingly accepting the tradeoffs: real-person
-likeness without consent raises publicity-rights exposure, real
-crests/logos raise trademark exposure, and OpenAI's own usage policy
-restricts photorealistic real people and brand logos, so `gpt-image-1`
-may refuse or alter these prompts unpredictably. If a run's image
-generation starts failing outright, this is the first thing to check —
-a prompt policy rejection reads like any other `OpenAI image API` error
-in the run's error banner. Exact kit pattern and sponsor logo placement
-change every season and are the detail most likely to come out wrong, so
-the prompt explicitly asks for correct team *colours* first, exact kit
-detail second. The CTA doesn't go through this at all — it's one fixed,
-hand-picked image (`CTA_IMAGE_URL` in `app/page.jsx`), not generated
-per run.
+**AI image generation is a fallback, not the default.** Most News feed
+items ship a real photo (`extractImage()` in `lib/feeds.js`), which is
+used as-is — `lib/images.js` / `/api/image` only gets called for a News
+story slide when its feed item genuinely had no usable photo. The cover
+slide reuses the lead (first-picked) story's own image rather than
+generating a second one, so it costs nothing extra. Results slides
+(templated from a football-data.org scoreline, not an RSS item) never
+have a photo to begin with, so they — and a Results post's cover — skip
+image generation entirely and render as a branded gradient background
+instead (`accent`/`accentLight`/`accentDeep` from `topics.style`, see
+`components/Slide.jsx`).
+
+**When it does generate an image, it names real players, clubs, crests,
+and sponsors on purpose.** `lib/images.js` builds the prompt straight
+from the slide's own headline and body, and explicitly asks for the real
+people, kits, crests, and sponsor branding involved — a deliberate
+choice to maximize realism, made knowingly accepting the tradeoffs:
+real-person likeness without consent raises publicity-rights exposure,
+real crests/logos raise trademark exposure, and OpenAI's own usage
+policy restricts photorealistic real people and brand logos, so
+`gpt-image-1` may refuse or alter these prompts unpredictably — when
+that happens, `generateSlideImage()` retries once with a generic,
+no-real-names prompt rather than failing the whole run. Exact kit
+pattern and sponsor logo placement change every season and are the
+detail most likely to come out wrong, so the prompt explicitly asks for
+correct team *colours* first, exact kit detail second. The CTA doesn't
+go through any of this — it's one fixed, hand-picked image
+(`CTA_IMAGE_URL` in `app/page.jsx`), not generated per run.
 
 **Why generated images live in Supabase Storage, not the DB.** OpenAI's
 image response is either a data URL or a base64 blob — neither is

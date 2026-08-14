@@ -170,26 +170,21 @@ export default function Dashboard() {
             slide.image_url = image_url;
           }
         } else {
+          // football-data.org gives team names and a score, not a photo --
+          // there's no real image to fall back to, so results slides skip
+          // image generation entirely and render as a branded gradient
+          // (see Slide.jsx) instead of an AI-generated stand-in.
           slide = buildResultSlide(chosen[i]);
-          setProgress(`Generating an image for match ${i + 1} of ${chosen.length}…`);
-          const { image_url } = await post('/api/image', {
-            role: 'story',
-            context: slideText(slide),
-          });
-          slide.image_url = image_url;
         }
         slides.push({ ...slide, role: 'story' });
       }
 
-      // Cover and CTA never had a photo of their own to reuse -- the
-      // cover always gets an AI-generated background illustrating the
-      // lead (first-picked) item, and the CTA uses one fixed image.
-      setProgress('Generating cover image…');
-      const { image_url: coverImage } = await post('/api/image', {
-        role: 'cover',
-        context: slideText(slides[0]),
-      });
-
+      // The cover illustrates the lead (first-picked) item, so it reuses
+      // that slide's own image rather than generating a second one --
+      // for News that's the real feed photo (or the AI fallback already
+      // generated above if the feed had none); for Results there's no
+      // photo at all, so the cover gets the same branded gradient as the
+      // story slides. CTA uses one fixed image, never generated.
       const cover = {
         role: 'cover',
         headline_parts: postType === 'results'
@@ -206,7 +201,7 @@ export default function Dashboard() {
               { text: 'today?', key: false },
             ],
         body: null,
-        image_url: coverImage,
+        image_url: slides[0]?.image_url || null,
       };
 
       const cta = {
