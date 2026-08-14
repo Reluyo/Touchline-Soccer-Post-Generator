@@ -71,15 +71,19 @@ whole carousel" flow. Full detail in README; short version:
    headline+body) same as before; Results slides are templated directly from
    the scoreline in `lib/results.js`'s `buildResultSlide()` — no Claude call,
    the "content" is just team names and a score.
-4. Cover reuses the lead (first-picked) story's own image — a real feed
-   photo when there is one, otherwise the AI fallback already generated
-   for that story slide. AI generation is only ever invoked as a News
-   story-slide fallback when the feed item had no photo; Results slides
-   (and a Results post's cover) have no photo source at all and render a
-   branded gradient instead (2026-08-14 change — see "Cutting down AI
-   image generation" below). **CTA is one fixed, hand-picked image**
-   (`CTA_IMAGE_URL` constant in `app/page.jsx`) — not regenerated per
-   run, the user asked for visual consistency on the closing slide.
+4. Cover shows a collage (up to 4, via `image_urls` — see `Slide.jsx`'s
+   grid layouts) of the real feed photos gathered from the picked News
+   stories; falls back to a single image (the AI fallback, if the one
+   story that needed it is the only photo available) or the branded
+   gradient (Results, or a News run where every story needed the AI
+   fallback) when there's fewer than 2 real photos to collage. AI
+   generation is only ever invoked as a News story-slide fallback when
+   the feed item had no photo — never for the cover directly, and never
+   for Results, which has no photo source at all (2026-08-14 change —
+   see "Cutting down AI image generation" below). **CTA is one fixed,
+   hand-picked image** (`CTA_IMAGE_URL` constant in `app/page.jsx`) —
+   not regenerated per run, the user asked for visual consistency on the
+   closing slide.
 5. Caption + save, same as before.
 
 `/api/rank` and `lib/claude.js`'s `rankStories` were deleted — nothing calls
@@ -99,20 +103,23 @@ stories already ship a real photo. Two changes, both in `app/page.jsx`'s
   gradient (`accentLight → accent → accentDeep` from `topics.style`)
   instead of a photo when `image_url` is empty. This applies to a
   Results post's cover too.
-- **The cover no longer gets its own generated image.** It now reuses
-  `slides[0].image_url` directly — for News that's the real feed photo,
-  or the AI fallback already generated for that story slide if the feed
-  had none; for Results it's `null`, which falls through to the same
-  gradient treatment. Net effect: a full Results post now does zero
-  OpenAI image calls; a News post only calls it for feed items missing a
-  photo, and never twice for the same story.
+- **The cover no longer gets its own generated image.** It now shows a
+  collage of the real feed photos collected while writing the story
+  slides (`feedImages` in `buildPost()`, capped at 4 via `image_urls` —
+  `Slide.jsx` already had 2/3/4-photo grid layouts wired up but unused
+  until now). When fewer than 2 real photos were collected — a News run
+  where every story needed the AI fallback, or any Results run — it
+  falls back to a single image (`image_url`): the lead slide's AI
+  fallback for News, or `null` for Results, which renders as the
+  branded gradient. Net effect: a full Results post now does zero
+  OpenAI image calls; a News post only calls it for feed items missing
+  a photo, and never for the cover directly.
 
-Tradeoff worth knowing: when the lead story needed the AI fallback (no
-feed photo), the cover and the first story slide now show the *exact
-same* image back-to-back in the carousel, since both reuse
-`slides[0].image_url`. Not addressed — flagged here in case it reads as
-repetitive in practice and is worth revisiting (e.g. a different crop,
-or accepting AI generation just for the cover in that one case).
+Originally the cover just reused `slides[0].image_url`, which meant the
+cover and the first story slide showed the *exact same* image
+back-to-back whenever that lead story needed the AI fallback. The
+collage (2026-08-14, same session, follow-up request) mostly sidesteps
+this — it only recurs now in the fewer-than-2-real-photos fallback case.
 
 Also updated `lib/images.js` this session (separate fix, same theme):
 when OpenAI's moderation blocks a prompt naming real players/clubs

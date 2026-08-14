@@ -115,13 +115,15 @@ Skipping this produces slides in Arial.
 items ship a real photo (`extractImage()` in `lib/feeds.js`), which is
 used as-is — `lib/images.js` / `/api/image` only gets called for a News
 story slide when its feed item genuinely had no usable photo. The cover
-slide reuses the lead (first-picked) story's own image rather than
-generating a second one, so it costs nothing extra. Results slides
-(templated from a football-data.org scoreline, not an RSS item) never
-have a photo to begin with, so they — and a Results post's cover — skip
-image generation entirely and render as a branded gradient background
-instead (`accent`/`accentLight`/`accentDeep` from `topics.style`, see
-`components/Slide.jsx`).
+slide never generates its own image either: it shows a collage (up to 4,
+via the `image_urls` column and `Slide.jsx`'s grid layouts) of whichever
+real feed photos were collected from the picked stories, falling back to
+a single image (the AI fallback for News, if that's all there is) or a
+branded gradient background when fewer than 2 real photos were
+available. Results slides (templated from a football-data.org scoreline,
+not an RSS item) never have a photo to begin with, so they — and a
+Results post's cover — skip image generation entirely and always render
+the gradient (`accent`/`accentLight`/`accentDeep` from `topics.style`).
 
 **When it does generate an image, it names real players, clubs, crests,
 and sponsors on purpose.** `lib/images.js` builds the prompt straight

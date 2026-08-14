@@ -152,6 +152,7 @@ export default function Dashboard() {
     setError('');
     try {
       const slides = [];
+      const feedImages = []; // real feed photos only, for the cover collage
       for (let i = 0; i < chosen.length; i += 1) {
         let slide;
         if (postType === 'news') {
@@ -159,9 +160,11 @@ export default function Dashboard() {
           const { slide: written } = await post('/api/write', { topicSlug, story: chosen[i] });
           slide = written;
 
-          // Not every feed item ships a usable photo. Rather than post
-          // a black slide, generate one.
-          if (!slide.image_url) {
+          if (slide.image_url) {
+            feedImages.push(slide.image_url);
+          } else {
+            // Not every feed item ships a usable photo. Rather than post
+            // a black slide, generate one.
             setProgress(`Generating an image for story ${i + 1} of ${chosen.length}…`);
             const { image_url } = await post('/api/image', {
               role: 'story',
@@ -179,12 +182,14 @@ export default function Dashboard() {
         slides.push({ ...slide, role: 'story' });
       }
 
-      // The cover illustrates the lead (first-picked) item, so it reuses
-      // that slide's own image rather than generating a second one --
-      // for News that's the real feed photo (or the AI fallback already
-      // generated above if the feed had none); for Results there's no
-      // photo at all, so the cover gets the same branded gradient as the
-      // story slides. CTA uses one fixed image, never generated.
+      // The cover shows a collage of the real feed photos gathered above
+      // (up to 4, however many were actually collected) rather than any
+      // single story's image or a generated one. Results have no feed
+      // photos at all, and a News run can end up with none too if every
+      // story needed the AI fallback -- either way, fall back to the
+      // lead slide's own image (the AI fallback for News, or nothing for
+      // Results, which renders as the branded gradient -- see Slide.jsx).
+      const collage = feedImages.slice(0, 4);
       const cover = {
         role: 'cover',
         headline_parts: postType === 'results'
@@ -201,7 +206,8 @@ export default function Dashboard() {
               { text: 'today?', key: false },
             ],
         body: null,
-        image_url: slides[0]?.image_url || null,
+        image_url: collage.length > 1 ? null : (collage[0] || slides[0]?.image_url || null),
+        image_urls: collage.length > 1 ? collage : [],
       };
 
       const cta = {
