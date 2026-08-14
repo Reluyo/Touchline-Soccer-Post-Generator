@@ -59,14 +59,15 @@ left over to finish. Don't rename those without the user asking.
     since the big-five leagues + Champions League haven't kicked off this
     season yet — `fetchResults()` correctly returned an empty list, which at
     least confirms auth + parsing work.
-  - `GOOGLE_CSE_API_KEY`, `GOOGLE_CSE_CX` — web image search for News story
+  - `BRAVE_SEARCH_API_KEY` — web image search for News story
     slides with no feed photo (`lib/imageSearch.js`), free tier 100
-    queries/day. Added 2026-08-14, fifth session — see "Web image search"
-    below. Not yet confirmed set in Vercel; if search silently never finds
-    anything, check these are actually there before assuming the feature
-    is broken (the code treats missing/invalid credentials as "search
-    failed" and falls straight through to AI generation, so it fails
-    silent, not loud).
+    queries/month (paid available). Added 2026-08-14, fifth session,
+    pivoted to Brave Search 2026-08-15 when Google closed JSON API to
+    new customers — see "Web image search" below. Not yet confirmed set
+    in Vercel; if search silently never finds anything, check this is
+    actually there before assuming the feature is broken (the code treats
+    missing/invalid credentials as "search failed" and falls straight
+    through to AI generation, so it fails silent, not loud).
 - **Model**: `claude-sonnet-5` (see `lib/claude.js`). Deliberately not Opus —
   cost-sensitive app. Uses `thinking: {type: 'adaptive'}` + `output_config:
   {effort: 'low'}` — disabling thinking outright was tried and reverted, it
@@ -94,21 +95,21 @@ whole carousel" flow. Full detail in README; short version:
    headline+body) same as before; Results slides are templated directly from
    the scoreline in `lib/results.js`'s `buildResultSlide()` — no Claude call,
    the "content" is just team names and a score.
-4. A News story slide with no feed photo tries `/api/image-search` (Google
-   Custom Search, real photo, re-hosted in Supabase Storage) before
+4. A News story slide with no feed photo tries `/api/image-search` (Brave
+   Search, real photo, re-hosted in Supabase Storage) before
    `/api/image` (AI generation) — search first, AI only if search finds
-   nothing or isn't configured (2026-08-14, fifth session — see "Web
-   image search" below). Cover shows a collage (up to 4, via `image_urls`
-   — see `Slide.jsx`'s grid layouts) of the real photos gathered from the
-   picked News stories (feed *or* search, never AI); falls back to a
-   single image (the AI fallback, if that's the only photo available) or
-   the branded gradient (Results, or a News run where every story needed
-   AI) when there's fewer than 2 real photos to collage. Neither search
-   nor AI generation ever runs for the cover directly, and neither runs
-   for Results, which has no photo source at all. **CTA is one fixed,
-   hand-picked image** (`CTA_IMAGE_URL` constant in `app/page.jsx`) —
-   not regenerated per run, the user asked for visual consistency on the
-   closing slide.
+   nothing or isn't configured (2026-08-14, fifth session; pivoted to
+   Brave 2026-08-15 — see "Web image search" below). Cover shows a
+   collage (up to 4, via `image_urls` — see `Slide.jsx`'s grid layouts)
+   of the real photos gathered from the picked News stories (feed *or*
+   search, never AI); falls back to a single image (the AI fallback, if
+   that's the only photo available) or the branded gradient (Results, or
+   a News run where every story needed AI) when there's fewer than 2 real
+   photos to collage. Neither search nor AI generation ever runs for the
+   cover directly, and neither runs for Results, which has no photo
+   source at all. **CTA is one fixed, hand-picked image**
+   (`CTA_IMAGE_URL` constant in `app/page.jsx`) — not regenerated per
+   run, the user asked for visual consistency on the closing slide.
 5. Caption + save, same as before.
 
 The standalone `/api/rank` endpoint from the old auto-generate flow is still
@@ -117,7 +118,7 @@ fourth session — see below) but only as a step inside `/api/feeds`, not a
 separate call the browser makes — it's still the human picking from
 `/api/feeds`'s output, never an automatic build.
 
-## Web image search for photo-less stories (2026-08-14, fifth session)
+## Web image search for photo-less stories (2026-08-14, fifth session; pivoted to Brave 2026-08-15)
 
 User reported the AI fallback producing two nearly-black images with
 garbled text baked in, and asked to add web search as an option for
@@ -134,30 +135,32 @@ stories with no feed photo. Two separate fixes:
   new third-party API key and — more importantly — carries a materially
   different risk than AI generation: a search result is someone's actual
   copyrighted press photo with no license for this use, not a novel
-  generated image. User chose to proceed anyway, picked Google Custom
-  Search, and chose search-before-AI ordering. New `lib/imageSearch.js` /
-  `/api/image-search`: queries Google Custom Search (image mode) using
-  just the slide's "key" headline words (club/player names, not the full
-  sentence — see `searchQuery()` in `app/page.jsx`), downloads the first
-  result that actually loads as a real image, and re-uploads it to the
-  same `generated-images` Supabase bucket AI images use (so the existing
-  image-proxy allowlist needs no changes — it already trusts that
-  bucket's host). `app/page.jsx`'s `buildPost()` now tries search first
-  for any News story slide with no feed photo, only calling `/api/image`
-  (AI generation) if search finds nothing usable or throws. Needs
-  `GOOGLE_CSE_API_KEY` + `GOOGLE_CSE_CX` set in Vercel (see `.env.example`)
-  — not yet confirmed those are actually set; if search never seems to
-  find anything, check there first, since a missing/invalid key fails
-  silently through to the AI fallback rather than erroring visibly.
+  generated image. User chose to proceed anyway. Initially implemented
+  with Google Custom Search, but Google closed that API to new customers
+  before user could set it up. Pivoted to **Brave Search API** (2026-08-15),
+  which has a free tier (100 calls/month, with paid options for higher
+  limits). New `lib/imageSearch.js` / `/api/image-search`: queries Brave
+  Search API using just the slide's "key" headline words (club/player
+  names, not the full sentence — see `searchQuery()` in `app/page.jsx`),
+  attempts to download image results or web results with image metadata,
+  and re-uploads the first that works to the `generated-images` Supabase
+  bucket (so the existing image-proxy allowlist needs no changes — it
+  already trusts that bucket's host). `app/page.jsx`'s `buildPost()` now
+  tries search first for any News story slide with no feed photo, only
+  calling `/api/image` (AI generation) if search finds nothing usable or
+  throws. Needs `BRAVE_SEARCH_API_KEY` set in Vercel (see `.env.example`)
+  — not yet confirmed set; if search never seems to find anything, check
+  there first, since a missing/invalid key fails silently through to the
+  AI fallback rather than erroring visibly.
 
 Real photos found this way (feed *or* search) now both count toward the
 cover collage; only AI-generated ones are excluded from it (`realImages`
 in `buildPost()`, renamed from `feedImages`).
 
-Not yet live-tested — worth checking after a real run whether Google's
-image search actually returns relevant, on-topic results for football
+Not yet live-tested — worth checking after a real run whether Brave's
+search actually returns relevant, on-topic results for football
 transfer/injury news specifically (as opposed to e.g. stock photos or
-unrelated matches of the same player name), and whether the 100/day free
+unrelated matches of the same player name), and whether the 100/month free
 quota is enough at real usage volume.
 
 ## Widening the picker to a week, with ranking (2026-08-14, fourth session)
@@ -327,6 +330,6 @@ unless a future session's network policy is less restrictive.
 4. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 60`.
-5. Confirm `GOOGLE_CSE_API_KEY`/`GOOGLE_CSE_CX` are actually set in Vercel,
+5. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel,
    then live-test `/api/image-search` — result relevance and the
-   100/day free quota are both unverified so far.
+   100/month free quota are both unverified so far.

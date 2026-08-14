@@ -116,7 +116,7 @@ Skipping this produces slides in Arial.
 **A News story slide with no feed photo tries, in order: web search, then
 AI generation.** Most News feed items ship a real photo (`extractImage()`
 in `lib/feeds.js`), which is used as-is. When one doesn't, `/api/image-search`
-(`lib/imageSearch.js`) queries Google Custom Search for the slide's key
+(`lib/imageSearch.js`) queries Brave Search API for the slide's key
 headline terms (just the club/player names, not the full sentence — see
 `searchQuery()` in `app/page.jsx`), downloads the first candidate result
 that actually loads as an image, and re-hosts it in the same Supabase
@@ -141,7 +141,7 @@ someone's actual copyrighted photograph — a wire agency's, a club's media
 team's, a news outlet's — republished on this account without permission.
 This is a deliberate, knowingly-accepted tradeoff the user chose over the
 alternative (AI-only, or a gradient background with no photo at all) —
-see the git history around the `GOOGLE_CSE_API_KEY` env var for that
+see the git history around the `BRAVE_SEARCH_API_KEY` env var for that
 conversation. If this project ever needs to reduce legal exposure, this
 is the first thing to reconsider or turn off.
 
