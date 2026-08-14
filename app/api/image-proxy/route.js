@@ -30,9 +30,12 @@ const ALLOWED_HOSTS = [
   'as.com', 'img.asmedia.epimg.net',
 ];
 
-// Generated slide backgrounds live in our own Supabase Storage bucket
-// (see lib/images.js), so that project's host is always trusted --
-// no need to hardcode it alongside the news outlets below.
+// AI-generated images (lib/images.js) and re-hosted web-search results
+// (lib/imageSearch.js) both land in our own Supabase Storage bucket, so
+// that project's host is always trusted -- no need to hardcode it
+// alongside the news outlets below. Search downloads the original photo
+// server-side and re-uploads it here specifically so this proxy never
+// needs to fetch arbitrary search-result hosts directly.
 function supabaseHost() {
   try {
     return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname;

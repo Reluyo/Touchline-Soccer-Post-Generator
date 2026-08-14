@@ -113,19 +113,37 @@ html2canvas was 4.90% off and visibly broken. Don't swap the library.
 `document.fonts.ready` and explicitly loads Anton and Barlow Condensed.
 Skipping this produces slides in Arial.
 
-**AI image generation is a fallback, not the default.** Most News feed
-items ship a real photo (`extractImage()` in `lib/feeds.js`), which is
-used as-is — `lib/images.js` / `/api/image` only gets called for a News
-story slide when its feed item genuinely had no usable photo. The cover
-slide never generates its own image either: it shows a collage (up to 4,
-via the `image_urls` column and `Slide.jsx`'s grid layouts) of whichever
-real feed photos were collected from the picked stories, falling back to
-a single image (the AI fallback for News, if that's all there is) or a
-branded gradient background when fewer than 2 real photos were
-available. Results slides (templated from a football-data.org scoreline,
-not an RSS item) never have a photo to begin with, so they — and a
-Results post's cover — skip image generation entirely and always render
-the gradient (`accent`/`accentLight`/`accentDeep` from `topics.style`).
+**A News story slide with no feed photo tries, in order: web search, then
+AI generation.** Most News feed items ship a real photo (`extractImage()`
+in `lib/feeds.js`), which is used as-is. When one doesn't, `/api/image-search`
+(`lib/imageSearch.js`) queries Google Custom Search for the slide's key
+headline terms (just the club/player names, not the full sentence — see
+`searchQuery()` in `app/page.jsx`), downloads the first candidate result
+that actually loads as an image, and re-hosts it in the same Supabase
+Storage bucket AI images use. Only if search finds nothing usable (or its
+API isn't configured — see `.env.example`) does `/api/image`
+(`lib/images.js`) generate one instead. The cover slide never generates
+or searches for its own image: it shows a collage (up to 4, via the
+`image_urls` column and `Slide.jsx`'s grid layouts) of whichever real
+photos — feed or search, never AI — were collected from the picked
+stories, falling back to a single image (the AI fallback, if that's all
+there is) or a branded gradient background when fewer than 2 real photos
+were available. Results slides (templated from a football-data.org
+scoreline, not an RSS item) never have a photo to begin with, so they —
+and a Results post's cover — skip both search and generation entirely
+and always render the gradient (`accent`/`accentLight`/`accentDeep` from
+`topics.style`).
+
+**Web search means real, copyrighted press photos with no license for
+this use.** Unlike the AI-generated images below (novel, not a copy of
+an existing photo), a search result re-hosted by `lib/imageSearch.js` is
+someone's actual copyrighted photograph — a wire agency's, a club's media
+team's, a news outlet's — republished on this account without permission.
+This is a deliberate, knowingly-accepted tradeoff the user chose over the
+alternative (AI-only, or a gradient background with no photo at all) —
+see the git history around the `GOOGLE_CSE_API_KEY` env var for that
+conversation. If this project ever needs to reduce legal exposure, this
+is the first thing to reconsider or turn off.
 
 **When it does generate an image, it names real players, clubs, crests,
 and sponsors on purpose.** `lib/images.js` builds the prompt straight

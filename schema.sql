@@ -83,10 +83,13 @@ create unique index seen_topic_fingerprint_idx on seen_stories (topic_id, finger
 
 -- ---------------------------------------------------------------
 -- STORAGE
--- Bucket for AI-generated slide backgrounds: the cover, the CTA, and
--- any story slide whose feed item had no usable photo. Public so the
--- browser can load them directly (through /api/image-proxy, same as
--- any other slide image) without needing a signed URL.
+-- Bucket for slide images this app sources itself rather than getting
+-- from an RSS feed: AI-generated backgrounds (lib/images.js) and photos
+-- found via web image search and re-hosted here (lib/imageSearch.js),
+-- for any story slide whose feed item had no usable photo, plus the
+-- fixed CTA image. Public so the browser can load them directly
+-- (through /api/image-proxy, same as any other slide image) without
+-- needing a signed URL.
 -- ---------------------------------------------------------------
 insert into storage.buckets (id, name, public)
 values ('generated-images', 'generated-images', true)

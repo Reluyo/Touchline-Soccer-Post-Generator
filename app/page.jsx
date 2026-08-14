@@ -18,6 +18,17 @@ function slideText(slide) {
   return [headline, slide.body].filter(Boolean).join('. ');
 }
 
+// A full sentence makes a poor image-search query -- this pulls just the
+// "key" headline parts (the club/player names writeSlide already flagged
+// as the actual news), which is what someone would type into a search
+// box themselves.
+function searchQuery(slide) {
+  return (slide.headline_parts || [])
+    .filter((p) => p.key)
+    .map((p) => p.text)
+    .join(' ');
+}
+
 // News candidates are keyed by their story fingerprint, results by the
 // match id from football-data.org -- both already unique per candidate.
 function candidateKey(postType, c) {
@@ -152,7 +163,7 @@ export default function Dashboard() {
     setError('');
     try {
       const slides = [];
-      const feedImages = []; // real feed photos only, for the cover collage
+      const realImages = []; // real photos only (feed or search, never AI), for the cover collage
       for (let i = 0; i < chosen.length; i += 1) {
         let slide;
         if (postType === 'news') {
@@ -161,16 +172,31 @@ export default function Dashboard() {
           slide = written;
 
           if (slide.image_url) {
-            feedImages.push(slide.image_url);
+            realImages.push(slide.image_url);
           } else {
-            // Not every feed item ships a usable photo. Rather than post
-            // a black slide, generate one.
-            setProgress(`Generating an image for story ${i + 1} of ${chosen.length}…`);
-            const { image_url } = await post('/api/image', {
-              role: 'story',
-              context: slideText(slide),
-            });
-            slide.image_url = image_url;
+            // Not every feed item ships a usable photo. Try a real photo
+            // via web image search first; only generate one with AI if
+            // search comes up empty (or fails outright) too.
+            setProgress(`Searching for a photo for story ${i + 1} of ${chosen.length}…`);
+            let found = null;
+            try {
+              const { image_url } = await post('/api/image-search', { query: searchQuery(slide) });
+              found = image_url;
+            } catch {
+              found = null;
+            }
+
+            if (found) {
+              slide.image_url = found;
+              realImages.push(found);
+            } else {
+              setProgress(`Generating an image for story ${i + 1} of ${chosen.length}…`);
+              const { image_url } = await post('/api/image', {
+                role: 'story',
+                context: slideText(slide),
+              });
+              slide.image_url = image_url;
+            }
           }
         } else {
           // football-data.org gives team names and a score, not a photo --
@@ -182,14 +208,16 @@ export default function Dashboard() {
         slides.push({ ...slide, role: 'story' });
       }
 
-      // The cover shows a collage of the real feed photos gathered above
-      // (up to 4, however many were actually collected) rather than any
-      // single story's image or a generated one. Results have no feed
-      // photos at all, and a News run can end up with none too if every
-      // story needed the AI fallback -- either way, fall back to the
-      // lead slide's own image (the AI fallback for News, or nothing for
-      // Results, which renders as the branded gradient -- see Slide.jsx).
-      const collage = feedImages.slice(0, 4);
+      // The cover shows a collage of the real photos gathered above (up
+      // to 4, however many were actually collected -- feed photos and
+      // search results both count, AI-generated ones don't) rather than
+      // any single story's image or a generated one. Results have no
+      // real photo source at all, and a News run can end up with none
+      // too if every story needed the AI fallback -- either way, fall
+      // back to the lead slide's own image (the AI fallback for News, or
+      // nothing for Results, which renders as the branded gradient --
+      // see Slide.jsx).
+      const collage = realImages.slice(0, 4);
       const cover = {
         role: 'cover',
         headline_parts: postType === 'results'
