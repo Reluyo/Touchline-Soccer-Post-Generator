@@ -72,7 +72,7 @@ export async function GET(request) {
 
   try {
     const upstream = await fetch(target.toString(), {
-      headers: { 'user-agent': 'Mozilla/5.0 (compatible; TouchlineBot/1.0)' },
+      headers: { 'user-agent': 'Mozilla/5.0 (compatible; SixYardBoxBot/1.0)' },
       signal: AbortSignal.timeout(7000),
     });
 

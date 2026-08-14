@@ -1,5 +1,5 @@
 export const metadata = {
-  title: 'Touchline — post generator',
+  title: 'SixYardBox — post generator',
   description: 'Generate and review daily European football carousels',
 };
 

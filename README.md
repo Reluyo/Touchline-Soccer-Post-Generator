@@ -1,4 +1,4 @@
-# Touchline — post generator
+# SixYardBox — post generator
 
 Generates European football carousels for Instagram. You choose **News** or
 **Results**, the app fetches candidates and shows them to you, you pick which

@@ -27,6 +27,18 @@ CLAUDE.md instead of correcting it, don't.)
   `topics.feeds`, checking `posts`/`slides`, or altering schema — use them
   directly rather than asking the user to run SQL by hand.
 
+## Naming: app is "SixYardBox", infra is still named "Touchline"
+
+2026-08-14 (third session): the app was rebranded from Touchline to
+**SixYardBox** — page title, the `topics.wordmark` value that actually gets
+stamped onto every generated slide image, `package.json`'s name, and the
+image-proxy's user-agent string were all updated (Supabase's live
+`topics.wordmark` row too, not just `schema.sql`'s seed). The user
+deliberately scoped this to app-facing branding only — the GitHub repo
+name, the Vercel project/production URL, and the Supabase project name
+all still say "Touchline" below, and that's intentional, not something
+left over to finish. Don't rename those without the user asking.
+
 ## Current deployment
 
 - **Repo**: `Reluyo/Touchline-Soccer-Post-Generator`, production branch is `main`.

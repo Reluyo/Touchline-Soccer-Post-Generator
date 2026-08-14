@@ -12,7 +12,7 @@ create table topics (
   id          uuid primary key default gen_random_uuid(),
   slug        text unique not null,        -- 'soccer'
   name        text not null,               -- 'European Soccer'
-  wordmark    text not null,               -- 'Touchline'
+  wordmark    text not null,               -- 'SixYardBox'
   style       jsonb not null default '{}', -- { accent, accentLight, accentDeep }
   feeds       jsonb not null default '[]', -- [{ name, url, lang, league }]
   ranking_rules text,                      -- plain-English newsworthiness rules
@@ -98,7 +98,7 @@ on conflict (id) do nothing;
 insert into topics (slug, name, wordmark, style, feeds, ranking_rules) values (
   'soccer',
   'European Soccer',
-  'Touchline',
+  'SixYardBox',
   '{"accent":"#16A39B","accentLight":"#3FD3C8","accentDeep":"#0B6B66"}',
   '[
     {"name":"BBC Sport","url":"https://feeds.bbci.co.uk/sport/football/rss.xml","lang":"en","league":"all"},
