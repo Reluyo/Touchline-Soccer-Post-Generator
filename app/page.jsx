@@ -351,6 +351,31 @@ export default function Dashboard() {
     }
   }
 
+  // Manually discard a queued draft -- e.g. one that's gone stale
+  // waiting for review. Callable from a queue card or from the open
+  // review screen; `postId` defaults to whatever's currently open.
+  async function deletePost(postId = activePost?.id) {
+    if (!postId) return;
+    if (!window.confirm("Delete this draft? This can't be undone.")) return;
+    try {
+      const res = await fetch('/api/posts', {
+        method: 'DELETE',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ postId }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Request failed: ${res.status}`);
+      if (activePost?.id === postId) {
+        setActivePost(null);
+        setChatLog([]);
+      }
+      await refresh();
+    } catch (err) {
+      setError(String(err.message || err));
+      await refresh();
+    }
+  }
+
   async function downloadAll() {
     if (!activePost) return;
     try {
@@ -496,20 +521,28 @@ export default function Dashboard() {
             {queue.length === 0 && <p style={S.empty}>Nothing waiting. Find stories or results to start.</p>}
             <div style={S.grid}>
               {queue.map((p) => (
-                <button
-                  key={p.id}
-                  onClick={() => { setActivePost(p); setActiveSlideIndex(0); setChatLog([]); }}
-                  style={S.card}
-                >
-                  <div style={S.cardMeta}>
-                    {p.kind === 'results' ? 'Results' : 'News'} ·{' '}
-                    {new Date(p.created_at).toLocaleDateString()}
-                  </div>
-                  <div style={S.cardHeadline}>
-                    {p.slides?.[1]?.headline_parts?.map((x) => x.text).join(' ') || '—'}
-                  </div>
-                  <div style={S.cardMeta}>{p.slides?.length || 0} slides</div>
-                </button>
+                <div key={p.id} style={{ ...S.card, position: 'relative' }}>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); deletePost(p.id); }}
+                    title="Delete this draft"
+                    style={S.cardDelete}
+                  >
+                    ×
+                  </button>
+                  <button
+                    onClick={() => { setActivePost(p); setActiveSlideIndex(0); setChatLog([]); }}
+                    style={S.cardOpen}
+                  >
+                    <div style={S.cardMeta}>
+                      {p.kind === 'results' ? 'Results' : 'News'} ·{' '}
+                      {new Date(p.created_at).toLocaleDateString()}
+                    </div>
+                    <div style={S.cardHeadline}>
+                      {p.slides?.[1]?.headline_parts?.map((x) => x.text).join(' ') || '—'}
+                    </div>
+                    <div style={S.cardMeta}>{p.slides?.length || 0} slides</div>
+                  </button>
+                </div>
               ))}
             </div>
           </section>
@@ -574,7 +607,10 @@ export default function Dashboard() {
                   Copy caption
                 </button>
                 {activePost.status === 'queued' && (
-                  <button onClick={approve} style={S.primaryButton}>Approve</button>
+                  <>
+                    <button onClick={() => deletePost()} style={S.dangerButton}>Delete draft</button>
+                    <button onClick={approve} style={S.primaryButton}>Approve</button>
+                  </>
                 )}
               </div>
 
@@ -659,6 +695,8 @@ const styles = {
                    fontWeight: 600, cursor: 'pointer' },
   secondaryButton: { background: '#171B1C', color: '#E8ECEC', border: '1px solid #2a2f30',
                      borderRadius: 8, padding: '10px 16px', fontSize: 14, cursor: 'pointer' },
+  dangerButton: { background: '#241416', color: '#e88', border: '1px solid #7a2a2a',
+                  borderRadius: 8, padding: '10px 16px', fontSize: 14, cursor: 'pointer' },
   backButton: { background: 'none', border: 'none', color: '#8B9797',
                 fontSize: 14, cursor: 'pointer', padding: 0, marginBottom: 20 },
   progress: { background: '#12211F', border: '1px solid #16A39B', color: '#3FD3C8',
@@ -673,6 +711,13 @@ const styles = {
   grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 },
   card: { background: '#171B1C', border: '1px solid #2a2f30', borderRadius: 10,
           padding: 16, textAlign: 'left', cursor: 'pointer', color: '#E8ECEC' },
+  cardOpen: { display: 'block', width: '100%', paddingRight: 26,
+              background: 'none', border: 'none', margin: 0,
+              textAlign: 'left', cursor: 'pointer', color: 'inherit', font: 'inherit' },
+  cardDelete: { position: 'absolute', top: 10, right: 10, width: 22, height: 22,
+                borderRadius: 6, border: '1px solid #2a2f30', background: '#1c2122',
+                color: '#8B9797', fontSize: 15, lineHeight: 1, cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 },
   cardMeta: { fontSize: 12, color: '#6E7A7A', marginBottom: 6 },
   cardHeadline: { fontSize: 15, lineHeight: 1.35, marginBottom: 8 },
   pickerHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center',

@@ -160,3 +160,38 @@ export async function PATCH(request) {
     return NextResponse.json({ error: String(err.message || err) }, { status: 500 });
   }
 }
+
+// Manually discard a queued (unapproved) draft, e.g. one that's gone
+// stale in the review queue. Deliberately restricted to 'queued' --
+// this is not a general post-deletion endpoint, and an approved post
+// (real published history) should never be removable this way.
+// Slides cascade-delete via the FK, same as every other post deletion
+// in this file.
+export async function DELETE(request) {
+  try {
+    const { postId } = await request.json();
+    const db = supabaseAdmin();
+
+    const { data: post, error: postError } = await db
+      .from('posts').select('id, status').eq('id', postId).single();
+    if (postError || !post) {
+      return NextResponse.json(
+        { error: 'This post no longer exists -- it may have already been removed.' },
+        { status: 404 }
+      );
+    }
+    if (post.status !== 'queued') {
+      return NextResponse.json(
+        { error: 'Only queued (unapproved) posts can be deleted this way.' },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await db.from('posts').delete().eq('id', postId);
+    if (error) throw error;
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return NextResponse.json({ error: String(err.message || err) }, { status: 500 });
+  }
+}
