@@ -431,31 +431,96 @@ original audit's High since the picker's human review is a real
 backstop, but worth revisiting once the translation fix above has had a
 few real runs to prove out).
 
+## Working down the re-audit's remaining list (2026-08-17, same day, third pass)
+
+Continued past the four "do next" items from earlier the same day into
+the "then" and "whenever there's room" tiers. Each change below was
+its own commit with `npm run build` run first.
+
+- **`approve()`'s silent failure — fixed, and it undercut last pass's
+  own work.** `app/page.jsx`'s `approve()` used a raw `fetch()` with no
+  `res.ok` check, so the new PATCH 404 added earlier the same day (for
+  an already-deleted post) was never actually seen by the UI — it just
+  proceeded as if approval had succeeded regardless of what the server
+  returned. This is the kind of thing that's easy to miss when fixing
+  the backend in isolation without re-checking who's reading the
+  response. Fixed: checks status, surfaces the error, and refreshes the
+  queue on failure so a stale post doesn't linger looking valid.
+- **Retry-with-backoff — added to all three paid API call sites**, not
+  just Claude. `lib/claude.js`'s `callClaude()` (used by rank, write,
+  caption, chat, translate) gets 2 short capped retries on 429/5xx.
+  `lib/images.js`'s `requestImage()` and `lib/imageSearch.js`'s Brave
+  call get one retry each, deliberately narrower: both have a per-request
+  timeout (55s and 10s respectively) that already eats most of their
+  route's budget if a request hangs, so only a *fast-failing* 429/5xx
+  response is retried — never the timeout itself, which would have no
+  budget left for a second attempt. Added `maxDuration = 30` to
+  `api/write`, `api/posts` (POST), and `api/chat`, none of which had an
+  explicit value before — they were relying on Vercel's ambiguous
+  default, which retries need headroom beyond.
+- **Env var checks** added to `lib/images.js` (`OPENAI_API_KEY`) and
+  `lib/results.js` (`FOOTBALL_DATA_API_KEY`), matching the pattern
+  `lib/imageSearch.js` already had for `BRAVE_SEARCH_API_KEY`.
+- **`lib/imageSearch.js` debug logging trimmed** to two summary lines
+  (result counts, and a "found nothing" line) — dropped the raw
+  response-shape dumps and per-candidate URL logging left over from
+  getting the integration working.
+- **Capture-loop implementations consolidated** — `downloadAll()` now
+  calls `lib/capture.js`'s `captureAll()` instead of reimplementing the
+  same loop inline, so there's exactly one place capture behavior lives.
+- **Source text now shown during review.** `api/write` returns the
+  original story summary as `source_summary` (not persisted — no schema
+  change, session-only); `buildPost()` merges it onto the saved slides
+  by position and now opens the just-built post straight into review
+  instead of dropping back to the queue list, since that's the one
+  moment `source_summary` is still around before a later re-fetch from
+  the DB loses it. A small "Source" block shows it above the edit-chat
+  panel when present. Reopening the same post later from the queue or
+  history won't show one — by design, not oversight.
+- **Daily cost cap (M-8) — deliberately NOT implemented.** The only
+  correct way to do this is a counter incremented when a run *starts*
+  (`/api/feeds`), not when one *completes* (`posts` row count) — a
+  broken or malicious loop that never reaches `/api/posts` would spend
+  money without ever tripping a completion-based cap, making it
+  security theatre rather than an actual backstop. Doing this properly
+  needs a new table, which is a schema change on the live production
+  DB — exactly the category of change the working agreement at the top
+  of this file says to flag before pushing, not decide alone mid-run.
+  Left undone rather than shipped in a form that looks like protection
+  but isn't. `APP_PASSWORD` (once confirmed set — see below) remains
+  the real primary defense here regardless.
+- **Not yet done**: unit tests for `lib/filter.js` and `lib/claude.js`'s
+  `parseJson()` — the last item on the re-audit's list, and the
+  `translateCandidates()` bug from earlier the same day is a concrete
+  example of exactly what a test suite would have caught immediately.
+
 ## Open items
 
 1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the auth
    fix from the security-audit session above is inert and the app is
    still fully open. Highest priority open item.
-2. The per-story build loop (`/api/write`, `/api/image`,
-   `/api/image-search`) still has no retry — a failure partway through
-   burns whatever was already spent on earlier stories in that run with
-   nothing saved. See "Re-audit..." above for the fuller list of what's
-   still open from that pass.
-3. Results workflow needs a real end-to-end test once the season starts and
+2. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return.
-4. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
+3. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
    watch the next few batches of generated posts for a body that still runs
    off the bottom.
-5. Not built: analytics view, feed-health UI (failed feeds now show in a
+4. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
-6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+5. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 120`.
-7. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel, then
+6. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel, then
    live-test `/api/image-search` — result relevance and the 100/month
-   free quota are both unverified so far. Also worth trimming the debug
-   `console.log`s in `lib/imageSearch.js` once this is confirmed working.
-8. Cross-language duplicate candidates in the picker (see "Re-audit..."
-   above) — worth revisiting once the translation fix has had a few real
-   runs, since the picker showing readable English for every candidate
-   was supposed to help a reviewer spot these by eye.
+   free quota are both unverified so far.
+7. Cross-language duplicate candidates in the picker (see the first
+   "Re-audit..." entry above) — worth revisiting once the translation
+   fix has had a few real runs, since the picker showing readable
+   English for every candidate was supposed to help a reviewer spot
+   these by eye.
+8. No tests exist anywhere in the repo. `lib/filter.js` (pure functions)
+   and `lib/claude.js`'s `parseJson()` are the highest-leverage,
+   lowest-effort place to start — no test runner is set up yet either.
+9. A real daily/per-run cost cap (M-8 above) needs a new table to track
+   run attempts, not completions — a schema change deliberately left
+   for an explicit decision rather than done autonomously. `APP_PASSWORD`
+   is the real defense in the meantime.
