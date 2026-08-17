@@ -250,16 +250,35 @@ export default function Dashboard() {
         image_url: CTA_IMAGE_URL,
       };
 
+      const built = [cover, ...slides, cta];
+
       setProgress('Writing caption and saving…');
-      await post('/api/posts', {
+      const { post: savedPost } = await post('/api/posts', {
         topicSlug,
         kind: postType,
-        slides: [cover, ...slides, cta],
+        slides: built,
       });
+
+      // source_summary only ever exists in this in-memory `built` array --
+      // it's deliberately not a slides column (see the api/write route),
+      // so it has to be merged in now, by position, before it's gone for
+      // good. Reopening this same post later (from the queue or history)
+      // won't have it; this is the one moment it's available.
+      const mergedSlides = savedPost.slides.map((s, i) => ({
+        ...s,
+        source_summary: built[i]?.source_summary || null,
+      }));
 
       cancelPicking();
       setProgress('');
-      await refresh();
+      // Drop straight into review instead of back to the queue list --
+      // this also means the human can immediately compare the generated
+      // body against the source (see the review panel below) while the
+      // source text above is still available to show.
+      setActivePost({ ...savedPost, slides: mergedSlides });
+      setActiveSlideIndex(0);
+      setChatLog([]);
+      refresh(); // background -- keeps the queue list accurate for later, nothing here depends on it
     } catch (err) {
       setError(String(err.message || err));
       setProgress('');
@@ -564,6 +583,12 @@ export default function Dashboard() {
 
             <div style={S.chatPanel}>
               <h3 style={S.sectionTitle}>Edit slide {activeSlideIndex + 1}</h3>
+              {activePost.slides[activeSlideIndex]?.source_summary && (
+                <div style={S.sourceBlock}>
+                  <div style={S.sourceLabel}>Source</div>
+                  {activePost.slides[activeSlideIndex].source_summary}
+                </div>
+              )}
               <div style={S.chatLog}>
                 {chatLog.length === 0 && (
                   <p style={S.empty}>
@@ -671,6 +696,11 @@ const styles = {
              whiteSpace: 'pre-wrap', fontFamily: 'inherit', color: '#C9D2D2' },
   chatPanel: { background: '#141819', border: '1px solid #2a2f30', borderRadius: 10,
                padding: 18, display: 'flex', flexDirection: 'column', height: 'fit-content' },
+  sourceBlock: { background: '#0F1213', border: '1px solid #2a2f30', borderRadius: 8,
+                 padding: '10px 12px', marginBottom: 14, fontSize: 13, lineHeight: 1.5,
+                 color: '#9CACA5' },
+  sourceLabel: { fontSize: 10.5, textTransform: 'uppercase', letterSpacing: '.08em',
+                 color: '#6E7A7A', fontWeight: 700, marginBottom: 4 },
   chatLog: { display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14,
              maxHeight: 420, overflowY: 'auto' },
   chatUser: { background: '#12211F', borderRadius: 8, padding: '10px 12px', fontSize: 13.5 },

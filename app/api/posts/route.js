@@ -56,7 +56,10 @@ export async function POST(request) {
       source_url: s.source_url,
       fingerprint: s.fingerprint || null,
     }));
-    const { error: slidesError } = await db.from('slides').insert(rows);
+    // .select() here (not just .insert()) so the response can hand back
+    // real slide ids -- the browser uses these to open the just-built
+    // post straight into review without a second round-trip through GET.
+    const { data: insertedSlides, error: slidesError } = await db.from('slides').insert(rows).select();
     if (slidesError) {
       // Don't leave a "queued" post with zero slides behind -- a post
       // without slides crashes the review screen the moment it's opened.
@@ -73,7 +76,15 @@ export async function POST(request) {
     const excess = (queued || []).slice(3).map((p) => p.id);
     if (excess.length) await db.from('posts').delete().in('id', excess);
 
-    return NextResponse.json({ postId: post.id, caption });
+    return NextResponse.json({
+      postId: post.id,
+      caption,
+      post: {
+        ...post,
+        caption,
+        slides: insertedSlides.sort((a, b) => a.position - b.position),
+      },
+    });
   } catch (err) {
     return NextResponse.json({ error: String(err.message || err) }, { status: 500 });
   }

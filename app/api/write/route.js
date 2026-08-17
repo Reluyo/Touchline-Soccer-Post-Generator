@@ -44,6 +44,12 @@ export async function POST(request) {
         source_name: story.sourceName,
         source_url: story.link,
         fingerprint: story.fingerprint,
+        // Not persisted (no slides column for it, deliberately -- see
+        // CLAUDE.md) -- carried only through this session's in-memory
+        // state so the review screen can show the original summary
+        // next to the generated body, since the prompt's "never invent
+        // facts" instruction is otherwise the only thing checking that.
+        source_summary: story.summary || null,
       },
     });
   } catch (err) {
