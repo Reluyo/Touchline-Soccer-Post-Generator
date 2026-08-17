@@ -2,6 +2,11 @@ import { NextResponse } from 'next/server';
 import { writeSlide } from '@/lib/claude';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// No explicit duration was ever set here, leaving this on Vercel's
+// ambiguous default -- callClaude's retries (see lib/claude.js) need
+// headroom beyond a single fast call's worth of time.
+export const maxDuration = 30;
+
 // Stage 3. Called once per story so each request stays well under
 // the Vercel timeout. The browser loops over the selected stories.
 export async function POST(request) {

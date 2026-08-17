@@ -308,16 +308,27 @@ export default function Dashboard() {
   async function approve() {
     if (!activePost) return;
     try {
-      await fetch('/api/posts', {
+      // Not using the post() helper -- this is a PATCH -- but the check it
+      // does (res.ok) matters just as much here: without it, a failed
+      // approval (e.g. this post was already deleted by the queue-trim
+      // race) went completely unnoticed and the UI proceeded as if it
+      // had succeeded.
+      const res = await fetch('/api/posts', {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ postId: activePost.id }),
       });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || `Request failed: ${res.status}`);
       setActivePost(null);
       setChatLog([]);
       await refresh();
     } catch (err) {
       setError(String(err.message || err));
+      // The post may no longer exist server-side even though this tab
+      // still shows it -- refresh the queue so it reflects reality
+      // instead of leaving a stale, now-inaccurate list behind.
+      await refresh();
     }
   }
 

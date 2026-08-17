@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { editChat } from '@/lib/claude';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// See app/api/write/route.js -- same reasoning, callClaude's retries
+// need headroom beyond Vercel's ambiguous default.
+export const maxDuration = 30;
+
 // The edit conversation for one slide. History comes from the browser
 // so nothing extra needs storing -- it is discarded once you approve.
 export async function POST(request) {

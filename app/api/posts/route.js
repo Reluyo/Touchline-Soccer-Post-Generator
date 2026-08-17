@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { writeCaption } from '@/lib/claude';
 import { supabaseAdmin } from '@/lib/supabase';
 
+// POST calls writeCaption (Claude) -- see app/api/write/route.js for
+// why this needs an explicit duration now that callClaude retries.
+export const maxDuration = 30;
+
 // Record story fingerprints as seen so a future run won't re-select them.
 // Only called on approval -- a story that was merely generated and never
 // approved (a discarded draft, a rejected test run) should stay eligible.
