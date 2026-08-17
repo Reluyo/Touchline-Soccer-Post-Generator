@@ -638,29 +638,93 @@ and `BRAVE_SEARCH_API_KEY` were confirmed set — worth treating any future
 report from a real run the same way: reproduce the exact failure first,
 fix narrowly, add a regression test, don't guess at the broader pattern.
 
+## Three bugs from a second real run: duplicate picker cards, a low-res slide, and Brave search barely finding anything (2026-08-17, eighth pass)
+
+User ran another real News build and reported three problems together.
+Investigated and fixed all three; two were confirmed root causes, the
+third is a strong, but not sandbox-verifiable, fix.
+
+- **Duplicate picker cards that select together and build duplicate
+  slides — fixed, root cause confirmed.** `rankStories()` in
+  `lib/claude.js` built its `order` array straight from Claude's
+  `{"ranked":[...]}` response with no dedup — if the model repeated an
+  index (plausible on a few-hundred-story list), the same story object
+  landed in the returned array twice. The picker keys candidates by
+  fingerprint (`app/page.jsx`'s `candidateKey`), so two array entries
+  for the same story share one key: clicking either card toggled both,
+  and `buildPost()`'s filter-by-key picked up both, writing the story
+  twice. Fixed by dropping repeated indices as they're encountered,
+  keeping the first (best-ranked) occurrence. Also added a last-mile
+  fingerprint-uniqueness filter in `app/api/feeds/route.js` as a
+  backstop against any other duplication source. Both covered by new
+  tests in `lib/claude.test.js`.
+- **A low-resolution image on a slide — fixed, root cause confirmed.**
+  `lib/feeds.js`'s `extractImage()` picked the *first* candidate that
+  merely wasn't confirmed too small — and treated "no width reported at
+  all" as passing that bar. A candidate with no size metadata (common
+  for an `enclosure` or the last-resort HTML `<img>`) could win purely
+  by coming first in priority order, ahead of a later candidate the feed
+  explicitly confirmed was large. Fixed: now prefers a confirmed-large
+  candidate over an unconfirmed one, only falling through to "unknown,
+  hope for the best" (then finally to a confirmed-small candidate) when
+  nothing better exists. Covered by new tests in `lib/feeds.test.js`.
+- **Web image search barely ever finding a usable photo — fixed, but
+  not verifiable from this sandbox.** `lib/imageSearch.js` was calling
+  Brave's plain **Web Search** endpoint (`/res/v1/web/search`) and
+  reading an `images.results` mixin from the response. That mixin is
+  opt-in/plan-gated and came back empty essentially every call, so
+  search silently fell through to parsing image metadata off plain web
+  results (which mostly don't have any) and from there straight to the
+  AI fallback almost every time — the opposite of what this feature is
+  for. Switched to Brave's **dedicated Image Search endpoint**
+  (`/res/v1/images/search`), confirmed via Brave's own docs and
+  independent references (this sandbox has no network egress to fetch
+  those pages directly — see the working agreement at the top of this
+  file — so this was corroborated through multiple independent
+  `WebSearch` queries rather than one fetch). Response parsing stayed
+  defensive (tries the old shapes as a fallback) in case that turns out
+  wrong on a real call. Also added `lib/imageDimensions.js` -- a small,
+  hand-rolled JPEG/PNG header parser (deliberately not the `image-size`
+  npm package, which has known unpatched infinite-loop DoS advisories in
+  parsers for formats this app doesn't even need) -- so a downloaded
+  search result's *actual* pixel width is checked, not just its file
+  size, closing the same low-res gap as the feeds.js fix above for
+  search-sourced images too. Bumped `count` from 10 to 20 (same one
+  billed call, more candidates to try). **This is the one fix in this
+  pass that genuinely needs a live run to confirm** — request/response
+  shape for this specific endpoint was not fetched from a live source.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
 Vercel as of 2026-08-17** (user confirmed directly) — no longer open items.
 
-1. Confirm the font-embedding fix actually reaches the real Anton font
+1. **Highest priority**: confirm the switch to Brave's dedicated Image
+   Search endpoint in `lib/imageSearch.js` actually works against a real
+   call — the endpoint/response shape were corroborated via `WebSearch`,
+   not fetched live (no network egress to Brave from this sandbox). Run
+   News, pick a story with no feed photo, and check whether a real
+   (non-AI-generated) image lands on that slide, and whether it's
+   reasonably sharp. If it still falls straight through to AI every
+   time, check the server logs for `[imageSearch]` lines — `0 candidate
+   images` means the endpoint/response-shape guess was wrong; `N
+   candidate images` but still no result means every candidate failed
+   the download/size checks.
+2. Confirm the font-embedding fix actually reaches the real Anton font
    in production (this sandbox can't reach Google Fonts to check) —
    download a slide with a long headline and confirm both the correct
    font and no text overlap.
-2. Try the new delete-draft buttons against a real queued post — see
+3. Try the new delete-draft buttons against a real queued post — see
    "Delete-drafts feature" above. Only mock-tested so far.
-3. Results workflow needs a real end-to-end test once the season starts and
+4. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return — including
    whether the new "★ Big game" ranking's threshold feels right against
    real fixtures (see "Results picker ranking" above).
-4. Not built: analytics view, feed-health UI (failed feeds now show in a
+5. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
-5. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 120`.
-6. Live-test `/api/image-search` now that `BRAVE_SEARCH_API_KEY` is
-   confirmed set — result relevance and the 100/month free quota are
-   both still unverified.
 7. Cross-language duplicate candidates in the picker (see the first
    "Re-audit..." entry above) — worth revisiting once the translation
    fix has had a few real runs, since the picker showing readable
@@ -671,10 +735,12 @@ Vercel as of 2026-08-17** (user confirmed directly) — no longer open items.
    for an explicit decision rather than done autonomously. `APP_PASSWORD`
    is the real defense in the meantime.
 9. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
-   `lib/results.test.js`) covers the RSS filter/dedupe logic,
-   `parseJson()`, and now Results ranking, but nothing else in the app
-   has test coverage — the API routes and `app/page.jsx`'s state machine
-   are still untested, by manual QA only.
+   `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
+   `lib/imageSearch.test.js`) covers the RSS filter/dedupe logic,
+   `parseJson()`, Results ranking, feed image selection, and the header
+   parser, but nothing else in the app has test coverage — the API
+   routes and `app/page.jsx`'s state machine are still untested, by
+   manual QA only.
 10. Watch a real batch of downloaded posts for the text-overflow /
     font-embedding fix above actually holding up outside this sandbox's
     network constraints.

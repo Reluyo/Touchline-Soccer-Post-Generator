@@ -69,9 +69,22 @@ export async function POST(request) {
     const byOriginal = new Map(nonEnglish.map((c, i) => [c, translated[i]]));
     const localized = ranked.map((c) => byOriginal.get(c) || c);
 
+    // Last-mile guard: the picker keys each candidate by its fingerprint
+    // (app/page.jsx's candidateKey), so two candidates that ever ended up
+    // sharing one -- rankStories() repeating an index was one real,
+    // shipped way this happened -- silently select and build together
+    // when only one card is clicked. Cheap to double-check here rather
+    // than trust every upstream step got uniqueness right.
+    const seenFingerprints = new Set();
+    const candidates = localized.filter((c) => {
+      if (seenFingerprints.has(c.fingerprint)) return false;
+      seenFingerprints.add(c.fingerprint);
+      return true;
+    });
+
     return NextResponse.json({
       topic: { id: topic.id, name: topic.name, wordmark: topic.wordmark, style: topic.style },
-      candidates: localized,
+      candidates,
       stats: { fetched: items.length, afterFilter: filtered.length,
                afterDedupe: deduped.length, afterSeen: fresh.length,
                afterRank: ranked.length },
