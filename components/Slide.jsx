@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+
 // One carousel slide at full Instagram size (1080 x 1350).
 // Rendered off-screen at true size, then captured to PNG.
 // The `scale` prop only shrinks it for on-screen preview -- capture
@@ -12,6 +14,54 @@ function proxied(url) {
   // canvas doesn't get tainted. See app/api/image-proxy/route.js.
   if (!url) return null;
   return `/api/image-proxy?url=${encodeURIComponent(url)}`;
+}
+
+// Whether a (proxied) image URL actually loads. A present-but-broken
+// image_url -- a host that started rejecting the request, an expired
+// signed URL, a dead link -- used to render as solid black (the base
+// container color showing through a background-image that silently
+// never resolved), with no fallback at all; only a fully-absent
+// image_url got the branded gradient. This probes the real photo the
+// same way lib/capture.js's waitForImages() already does for capture
+// readiness, so PhotoLayer below can fall back to that same gradient
+// for ANY load failure, not just a missing URL -- regardless of cause.
+function useImageLoaded(url) {
+  const [status, setStatus] = useState(url ? 'loading' : 'none');
+
+  useEffect(() => {
+    if (!url) {
+      setStatus('none');
+      return undefined;
+    }
+    setStatus('loading');
+    let cancelled = false;
+    const img = new Image();
+    img.onload = () => { if (!cancelled) setStatus('loaded'); };
+    img.onerror = () => { if (!cancelled) setStatus('error'); };
+    img.src = url;
+    return () => { cancelled = true; };
+  }, [url]);
+
+  return status;
+}
+
+// One photo tile -- the single full-bleed background, or one grid cell
+// of a cover collage. Renders the branded gradient until the real photo
+// is confirmed loadable, and keeps showing it if the photo never loads.
+function PhotoLayer({ url, gradient, style }) {
+  const status = useImageLoaded(url);
+  const showPhoto = status === 'loaded';
+
+  return (
+    <div
+      style={{
+        ...style,
+        backgroundImage: showPhoto ? `url(${url})` : gradient,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+      }}
+    />
+  );
 }
 
 export default function Slide({
@@ -47,6 +97,7 @@ export default function Slide({
     color: 'transparent',
     filter: 'drop-shadow(0 3px 0 rgba(0,0,0,.85))',
   };
+  const photoGradient = `linear-gradient(155deg, ${accentLight} 0%, ${accent} 45%, ${accentDeep} 100%)`;
 
   return (
     <div
@@ -75,28 +126,19 @@ export default function Slide({
           {collageUrls.length > 1 ? (
             <div style={{ position: 'absolute', inset: 0, display: 'grid', gap: 2, ...collageGrid }}>
               {collageUrls.map((url, i) => (
-                <div
+                <PhotoLayer
                   key={url}
-                  style={{
-                    gridArea: collageAreas[i],
-                    backgroundImage: `url(${proxied(url)})`,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
+                  url={proxied(url)}
+                  gradient={photoGradient}
+                  style={{ gridArea: collageAreas[i] }}
                 />
               ))}
             </div>
           ) : (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                backgroundImage: image
-                  ? `url(${image})`
-                  : `linear-gradient(155deg, ${accentLight} 0%, ${accent} 45%, ${accentDeep} 100%)`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-              }}
+            <PhotoLayer
+              url={image}
+              gradient={photoGradient}
+              style={{ position: 'absolute', inset: 0 }}
             />
           )}
           <div
