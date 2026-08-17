@@ -323,14 +323,19 @@ export default function Dashboard() {
 
   async function downloadAll() {
     if (!activePost) return;
-    for (let i = 0; i < activePost.slides.length; i += 1) {
-      const node = slideRefs.current[i];
-      if (!node) continue;
-      setProgress(`Rendering slide ${i + 1} of ${activePost.slides.length}…`);
-      const dataUrl = await captureSlide(node);
-      downloadDataUrl(dataUrl, `slide-${String(i + 1).padStart(2, '0')}.png`);
+    try {
+      for (let i = 0; i < activePost.slides.length; i += 1) {
+        const node = slideRefs.current[i];
+        if (!node) continue;
+        setProgress(`Rendering slide ${i + 1} of ${activePost.slides.length}…`);
+        const dataUrl = await captureSlide(node);
+        downloadDataUrl(dataUrl, `slide-${String(i + 1).padStart(2, '0')}.png`);
+      }
+    } catch (err) {
+      setError(String(err.message || err));
+    } finally {
+      setProgress('');
     }
-    setProgress('');
   }
 
   const S = styles;

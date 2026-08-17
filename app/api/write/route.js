@@ -9,8 +9,11 @@ export async function POST(request) {
     const { topicSlug, story } = await request.json();
     const db = supabaseAdmin();
 
-    const { data: topic } = await db
+    const { data: topic, error: topicError } = await db
       .from('topics').select('id').eq('slug', topicSlug).single();
+    if (topicError || !topic) {
+      return NextResponse.json({ error: `Unknown topic: ${topicSlug}` }, { status: 404 });
+    }
 
     // Give the writer recent approved headlines so phrasing stays
     // varied and the account keeps a consistent voice.

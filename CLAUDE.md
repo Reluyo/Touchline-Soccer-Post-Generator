@@ -361,25 +361,101 @@ condition depended on) and the current code has its own issues `AUDIT.md`
 never looked at (`/api/image`, `/api/image-search`, `/api/results` didn't
 exist yet when it was written).
 
+## Re-audit against current code, then fixes (2026-08-17, same day)
+
+Took the previous entry's own advice: re-audited against the *actual*
+current code (not `AUDIT.md`'s stale commit) and worked through the
+resulting "do next" list. Full re-audit isn't saved to the repo (it was
+presented as an artifact in that session) — condensed version below;
+ask for a fresh pass if the detail is needed again.
+
+**Found one new, real bug in the process**: `translateCandidates()` in
+`lib/claude.js` (the picker's "show non-English candidates in English"
+feature, added 2026-08-14) matched translations back to their source
+story by checking whether the *translated* text equaled the *original*
+text — which is never true for a real translation. Claude's response
+already carried the correct `index` field for this exact purpose; it was
+computed and never read. Net effect: every kicker/L'Equipe candidate in
+the picker rendered in German/French instead of English, silently, while
+still paying for the (wasted) translation call. Confirmed this reproduces
+by running the matching logic in isolation before touching anything, and
+confirmed via the live DB that it does *not* corrupt saved posts —
+`writeSlide()` does its own separate correct translation at write time,
+so this was scoped to the picker's own display. **Fixed**: rewrote the
+matching to key off the batch-local `index` directly, keyed by object
+reference instead of content equality. Also moved the `callClaude` call
+for each batch inside its own try/catch (it wasn't before) — a batch that
+failed at the network/API level, not just a bad-JSON level, used to throw
+out of the whole function and kill `/api/feeds`'s entire response;
+now it degrades to "this batch stays untranslated" like a parse failure
+already did.
+
+Also fixed, all four of the re-audit's "do next" items:
+
+- **Unguarded Supabase `.single()` calls** — added the same
+  `if (error || !topic) return 404` guard `api/feeds` already had to
+  `api/write`'s topic lookup and all three lookups in `api/posts`
+  (topic in POST, topic in GET, post in PATCH). The PATCH one matters
+  most in practice: it's what used to throw a bare `Cannot read
+  properties of undefined (reading 'slides')` if you clicked Approve on
+  a post that had already been deleted (e.g. by the queue-trim race) —
+  now it returns a clear "this post no longer exists" message instead.
+- **Slides insert now checked and rolled back on failure** — `api/posts`
+  POST used to insert the post row, then insert its slides with no error
+  check at all; a failed slides insert left a "queued" post with zero
+  slides that crashed the review screen when opened. Now checks the
+  error and deletes the just-created post if the slides insert fails.
+- **`downloadAll()` now has try/catch/finally** — it was the only one of
+  six async handlers in `app/page.jsx` with no error handling at all; a
+  capture failure on any slide (most plausibly an image-proxy host not
+  yet on the allowlist) left "Rendering slide X of Y…" stuck on screen
+  forever with nothing telling you it failed. Now matches the same
+  try/catch/finally shape as `approve()` and the others in that file.
+
+Ran `npm run build` after each change and read the full diff before
+committing, per the working agreement above. All four fixes are small,
+additive, and don't touch the success path's existing shape.
+
+**Not yet done** — the re-audit's "then" and "whenever there's room"
+tiers: retry-with-backoff on the per-story build loop (`/api/write`,
+`/api/image`, `/api/image-search` — still no retry, so a mid-loop
+failure still burns whatever was already spent on earlier stories in
+that run), applying `imageSearch.js`'s own env-var-presence-check
+pattern to `lib/images.js`/`lib/results.js`, trimming the debug
+`console.log`s in `lib/imageSearch.js`, surfacing source text next to
+generated body copy in the review UI, consolidating the two capture-loop
+implementations (`lib/capture.js`'s unused `captureAll()` vs.
+`downloadAll()`'s own inline copy), a daily run cap as a cost backstop,
+and the cross-language duplicate-candidate question (downgraded from the
+original audit's High since the picker's human review is a real
+backstop, but worth revisiting once the translation fix above has had a
+few real runs to prove out).
+
 ## Open items
 
-1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the fix
-   above is inert and the app is still fully open. Highest priority open
-   item, see "Security audit" above.
-2. Results workflow needs a real end-to-end test once the season starts and
+1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the auth
+   fix from the security-audit session above is inert and the app is
+   still fully open. Highest priority open item.
+2. The per-story build loop (`/api/write`, `/api/image`,
+   `/api/image-search`) still has no retry — a failure partway through
+   burns whatever was already spent on earlier stories in that run with
+   nothing saved. See "Re-audit..." above for the fuller list of what's
+   still open from that pass.
+3. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return.
-3. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
+4. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
    watch the next few batches of generated posts for a body that still runs
    off the bottom.
-4. Not built: analytics view, feed-health UI (failed feeds only show in the
-   picker screen's warning banner, nowhere persistent/actionable).
-5. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+5. Not built: analytics view, feed-health UI (failed feeds now show in a
+   persistent banner for that session, but nothing is recorded across runs).
+6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
-   enough and within `/api/feeds`'s `maxDuration = 60`.
-6. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel,
-   then live-test `/api/image-search` — result relevance and the
-   100/month free quota are both unverified so far.
-7. `AUDIT.md`'s High/Medium findings need re-checking against the current
-   News/Results picker code (see "Security audit" above) before acting on
-   any of them — worth a fresh audit pass rather than assuming they still
-   apply as written.
+   enough and within `/api/feeds`'s `maxDuration = 120`.
+7. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel, then
+   live-test `/api/image-search` — result relevance and the 100/month
+   free quota are both unverified so far. Also worth trimming the debug
+   `console.log`s in `lib/imageSearch.js` once this is confirmed working.
+8. Cross-language duplicate candidates in the picker (see "Re-audit..."
+   above) — worth revisiting once the translation fix has had a few real
+   runs, since the picker showing readable English for every candidate
+   was supposed to help a reviewer spot these by eye.

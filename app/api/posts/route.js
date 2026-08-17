@@ -26,8 +26,11 @@ export async function POST(request) {
     const { topicSlug, slides, kind = 'news' } = await request.json();
     const db = supabaseAdmin();
 
-    const { data: topic } = await db
+    const { data: topic, error: topicError } = await db
       .from('topics').select('id, wordmark').eq('slug', topicSlug).single();
+    if (topicError || !topic) {
+      return NextResponse.json({ error: `Unknown topic: ${topicSlug}` }, { status: 404 });
+    }
 
     const caption = await writeCaption({ slides, wordmark: topic.wordmark });
 
@@ -49,7 +52,13 @@ export async function POST(request) {
       source_url: s.source_url,
       fingerprint: s.fingerprint || null,
     }));
-    await db.from('slides').insert(rows);
+    const { error: slidesError } = await db.from('slides').insert(rows);
+    if (slidesError) {
+      // Don't leave a "queued" post with zero slides behind -- a post
+      // without slides crashes the review screen the moment it's opened.
+      await db.from('posts').delete().eq('id', post.id);
+      throw slidesError;
+    }
 
     // Trim the queue to the three newest.
     const { data: queued } = await db
@@ -72,8 +81,11 @@ export async function GET(request) {
     const slug = request.nextUrl.searchParams.get('topic') || 'soccer';
     const db = supabaseAdmin();
 
-    const { data: topic } = await db
+    const { data: topic, error: topicError } = await db
       .from('topics').select('*').eq('slug', slug).single();
+    if (topicError || !topic) {
+      return NextResponse.json({ error: `Unknown topic: ${slug}` }, { status: 404 });
+    }
 
     const { data: posts } = await db
       .from('posts')
@@ -105,8 +117,14 @@ export async function PATCH(request) {
     const { postId } = await request.json();
     const db = supabaseAdmin();
 
-    const { data: post } = await db
+    const { data: post, error: postError } = await db
       .from('posts').select('*, slides(*)').eq('id', postId).single();
+    if (postError || !post) {
+      return NextResponse.json(
+        { error: 'This post no longer exists -- it may have already been removed from the queue.' },
+        { status: 404 }
+      );
+    }
 
     await db.from('posts')
       .update({ status: 'approved', approved_at: new Date().toISOString() })
