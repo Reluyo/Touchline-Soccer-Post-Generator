@@ -694,6 +694,72 @@ third is a strong, but not sandbox-verifiable, fix.
   pass that genuinely needs a live run to confirm** — request/response
   shape for this specific endpoint was not fetched from a live source.
 
+## A third real run: two RSS feeds blocked by bot-protection, and a slide with no body text (2026-08-17, ninth pass)
+
+User ran another real News build and reported three more problems.
+Investigated using the live Supabase data for the actual post (found via
+MCP, not guessed) rather than reasoning about it in the abstract.
+
+- **Get French Football News ("not recognized as RSS 1 or 2") and Get
+  Italian Football News ("Invalid character in entity name") both
+  failed — likely fixed, but not verifiable from this sandbox.**
+  Root-caused to rss-parser's own default User-Agent header, which is
+  the literal string `"rss-parser"` — about as obvious a scraper
+  signature as exists, and exactly what WordPress bot-protection
+  (Wordfence, Cloudflare, etc.) tends to challenge or block. Both are
+  WordPress sites, both were confirmed *working* in the original
+  2026-08-13 feed-verification pass, and "not recognized as RSS 1 or 2"
+  is consistent with getting back a challenge/interstitial HTML page
+  instead of the real feed rather than a genuinely broken one. Set a
+  real browser User-Agent on the shared `Parser` instance in
+  `lib/feeds.js` — can only help, since it can't break a feed that was
+  already working with the old default. Separately, also hardened
+  `fetchFeed()` with one retry on any parse failure: re-fetch the raw
+  XML directly and repair a bare, unescaped `&` (invalid XML, but a
+  common real-world feed bug, and exactly what "Invalid character in
+  entity name" means) before parsing again — a narrow, same-shape fix to
+  parseJson()'s existing quirk-repairs, just for XML instead of JSON.
+  Covered by new tests in `lib/feeds.test.js`. **Not verified against
+  the real feeds** — no network access to either host from this sandbox.
+- **Two slides with a headline but no body text — fixed, root cause
+  confirmed via the live post's actual DB row.** `writeSlide()` in
+  `lib/claude.js` returned `parseJson(text)` straight through with no
+  validation that the result was actually complete. Checked the real
+  post in Supabase: both broken slides had a normal, non-empty
+  `headline_parts` but `body: null` — valid, cleanly-parsed JSON that
+  simply didn't follow the prompt's own "always write a body" rule.
+  Nowhere in the pipeline throws on that, so it silently saved as a
+  slide with no body text. Fixed: `writeSlide()` now validates the
+  response has a non-empty body and usable headline parts, retries once
+  if not (a bad response from a non-deterministic model rarely repeats),
+  and if the body is still missing after that, falls back to the
+  story's own summary text verbatim (never invents anything) rather than
+  shipping empty. An unusable headline still throws rather than being
+  papered over -- there's no safe way to fabricate one the same way.
+  Covered by new tests in `lib/claude.test.js`.
+- **Slide 7's low-res image — root cause confirmed, but a different one
+  than the Brave search path from last session's fixes.** The live DB
+  row showed this slide's image was a **feed** photo (Guardian), not a
+  search or AI-generated one: a `?width=140&...&s=<hash>` URL. Guardian
+  URLs are deliberately never upgraded to a larger size (see
+  `upgradeImageUrl()` — rewriting that hash-signed URL breaks it
+  outright, a prior session's fix), so 140px is genuinely the *only*
+  size that feed ever offers for this item, and `extractImage()` was
+  still using it anyway since something beat nothing. Fixed: a candidate
+  every source confirms is too small is no longer used at all —
+  `extractImage()` now returns null in that case (same as "no photo"),
+  which lets `buildPost()`'s existing fallback chain try a real web
+  image search (now on the fixed Brave endpoint) instead of a feed
+  thumbnail already known to be too small. This is a real, general
+  improvement to image quality across any feed with only a small photo
+  on offer, not just Guardian specifically.
+
+Still outstanding from last session: the Brave Image Search endpoint
+switch itself has not been confirmed working by a real run yet — this
+session's report didn't mention whether search found real photos, only
+this Guardian feed-image issue and the two bugs above. Still the
+single highest-priority open item.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
@@ -709,38 +775,48 @@ Vercel as of 2026-08-17** (user confirmed directly) — no longer open items.
    time, check the server logs for `[imageSearch]` lines — `0 candidate
    images` means the endpoint/response-shape guess was wrong; `N
    candidate images` but still no result means every candidate failed
-   the download/size checks.
-2. Confirm the font-embedding fix actually reaches the real Anton font
+   the download/size checks. Two more real runs have gone by since this
+   was written without confirming it either way — worth prioritizing
+   getting one clean confirmation over continuing to fix other things blind.
+2. Confirm the two RSS fixes from the ninth pass actually work: the new
+   browser User-Agent on `lib/feeds.js`'s `Parser` (should fix Get French
+   Football News and Get Italian Football News, both WordPress sites
+   likely blocking the old `"rss-parser"` UA) and the bare-`&` XML repair
+   retry. Also confirm `writeSlide()`'s new retry-then-fallback actually
+   stops a slide from shipping with no body text -- the fallback path
+   itself (reusing the story's own summary) was only unit-tested with
+   mocked Claude responses, not seen on a real thin-source story yet.
+3. Confirm the font-embedding fix actually reaches the real Anton font
    in production (this sandbox can't reach Google Fonts to check) —
    download a slide with a long headline and confirm both the correct
    font and no text overlap.
-3. Try the new delete-draft buttons against a real queued post — see
+4. Try the new delete-draft buttons against a real queued post — see
    "Delete-drafts feature" above. Only mock-tested so far.
-4. Results workflow needs a real end-to-end test once the season starts and
+5. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return — including
    whether the new "★ Big game" ranking's threshold feels right against
    real fixtures (see "Results picker ranking" above).
-5. Not built: analytics view, feed-health UI (failed feeds now show in a
+6. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
-6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+7. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 120`.
-7. Cross-language duplicate candidates in the picker (see the first
+8. Cross-language duplicate candidates in the picker (see the first
    "Re-audit..." entry above) — worth revisiting once the translation
    fix has had a few real runs, since the picker showing readable
    English for every candidate was supposed to help a reviewer spot
    these by eye.
-8. A real daily/per-run cost cap (M-8 above) needs a new table to track
+9. A real daily/per-run cost cap (M-8 above) needs a new table to track
    run attempts, not completions — a schema change deliberately left
    for an explicit decision rather than done autonomously. `APP_PASSWORD`
    is the real defense in the meantime.
-9. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
-   `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
-   `lib/imageSearch.test.js`) covers the RSS filter/dedupe logic,
-   `parseJson()`, Results ranking, feed image selection, and the header
-   parser, but nothing else in the app has test coverage — the API
-   routes and `app/page.jsx`'s state machine are still untested, by
-   manual QA only.
-10. Watch a real batch of downloaded posts for the text-overflow /
+10. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
+    `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
+    `lib/imageSearch.test.js`) covers the RSS filter/dedupe logic,
+    `parseJson()`, Results ranking, feed image selection, and the header
+    parser, but nothing else in the app has test coverage — the API
+    routes and `app/page.jsx`'s state machine are still untested, by
+    manual QA only.
+11. Watch a real batch of downloaded posts for the text-overflow /
     font-embedding fix above actually holding up outside this sandbox's
     network constraints.
