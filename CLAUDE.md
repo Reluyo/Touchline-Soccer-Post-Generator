@@ -513,18 +513,87 @@ screen correctly backs out to the queue list after a successful
 delete. Worth deleting one real stale draft next time the app is open,
 just to close the loop on an actual live confirmation.
 
+## Real-post bug hunt: Guardian images, black-slide fallback, and a font-embedding hang (2026-08-17, fifth pass)
+
+The user pasted screenshots of an actual queued post's slides for a
+sanity check before approving. That surfaced three real, previously
+unknown bugs no amount of code reading had caught, plus one already-known
+one (the corrupted `Andkey` slide from the DB spot-check earlier this
+session) — the exact kind of thing manual QA against real output finds
+that a code audit doesn't.
+
+- **Every Guardian-sourced image failed to load (fixed).** 3 for 3 in
+  that one post — two story slides and one cover-collage tile, all
+  black; zero failures from BBC or football-espana.net. Root cause:
+  `lib/feeds.js`'s `upgradeImageUrl()` rewrote the `?width=` query param
+  on Guardian URLs to request a larger image, but left the URL's
+  trailing `&s=<hash>` (almost certainly a signature over the original
+  request) untouched — the Guardian's CDN appears to reject the
+  resulting mismatched URL outright. Stopped mutating Guardian URLs;
+  the original (smaller) URL's signature stays valid and the photo
+  actually loads. A real photo at lower resolution beats a guaranteed-
+  blank slide.
+- **Slide.jsx had no fallback for a present-but-broken image (fixed).**
+  This is *why* the Guardian bug was even visible as solid black rather
+  than the branded gradient — only a fully-*absent* `image_url` got the
+  gradient; a non-null URL that failed to fetch just left the base black
+  background showing through. Added a `PhotoLayer` component that
+  actually probes whether each image loads (same technique
+  `lib/capture.js`'s `waitForImages()` already used for a different
+  purpose) and falls back to the gradient on ANY failure — wrong host,
+  expired signature, dead link, a cause nobody's hit yet. Applies to
+  both the single-image case and each cover-collage tile independently.
+  Verified with a mocked dev server: broken → gradient, working → real
+  photo, mixed collage → correct per-tile.
+- **Headline/body text overlap on a 3-line headline (fixed) — and a
+  worse bug found while diagnosing it.** Reproducing the exact Romero
+  slide content at true capture resolution via a native browser render
+  showed clean, non-overlapping layout — ruling out a CSS bug. Triggering
+  the *actual* download pipeline (`captureSlide` → html-to-image's
+  `toPng`) reproduced it for real: the exported PNG silently fell back
+  to a generic wide font instead of the intended condensed "Anton" face
+  (html-to-image serializes to a separate SVG for rasterizing, which
+  doesn't automatically inherit the page's own loaded `@font-face`
+  rules), and the layout is sized for Anton's narrow letterforms
+  specifically (the headline CSS applies `scaleX(.92)` for exactly this
+  reason). Fixed by calling html-to-image's own `getFontEmbedCSS()` once
+  per download run to pre-fetch and inline the real font files, instead
+  of relying on its internal auto-discovery. That surfaced a second,
+  more serious bug: when the font CDN is unreachable, `getFontEmbedCSS()`
+  doesn't fail fast, it hangs — and so does `toPng()`'s own fallback
+  discovery when no `fontEmbedCSS` is supplied. Unguarded, either one
+  turned "Download all slides" into a silent, permanent stuck progress
+  bar with no error and no recovery short of a page reload. Fixed by
+  racing the pre-fetch against a 4s timeout and explicitly passing an
+  empty `fontEmbedCSS` string on failure (not `undefined` — only a
+  non-null value skips `toPng()`'s own internal discovery attempt).
+  **Not verified against the real Anton font specifically** — this
+  sandbox cannot reach Google Fonts at all (network policy, not a bug),
+  so every test here exercised the timeout/fallback path, not the
+  happy path. In production the pre-fetch should just succeed quickly.
+- **The corrupted "Barcelona" slide — deleted, not fixed.** No way to
+  recover a correct headline for it (the original source text was never
+  persisted — see the source-text feature earlier this session — and
+  the story itself is long gone from any feed by now). The post had
+  already been approved by the time this got sorted out, so it was
+  deleted directly via Supabase (bypassing the normal queued-only
+  restriction) with explicit user confirmation, rather than through the
+  app's delete-draft feature, which correctly refuses to touch anything
+  already approved.
+
 ## Open items
 
 1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the auth
    fix from the security-audit session above is inert and the app is
    still fully open. Highest priority open item.
-2. Try the new delete-draft buttons against a real queued post — see
+2. Confirm the font-embedding fix actually reaches the real Anton font
+   in production (this sandbox can't reach Google Fonts to check) —
+   download a slide with a long headline and confirm both the correct
+   font and no text overlap.
+3. Try the new delete-draft buttons against a real queued post — see
    "Delete-drafts feature" above. Only mock-tested so far.
-3. Results workflow needs a real end-to-end test once the season starts and
+4. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return.
-4. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
-   watch the next few batches of generated posts for a body that still runs
-   off the bottom.
 5. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
 6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
@@ -546,3 +615,6 @@ just to close the loop on an actual live confirmation.
     RSS filter/dedupe logic and `parseJson()`, but nothing else in the
     app has test coverage — the API routes and `app/page.jsx`'s state
     machine are still untested, by manual QA only.
+11. Watch a real batch of downloaded posts for the text-overflow /
+    font-embedding fix above actually holding up outside this sandbox's
+    network constraints.
