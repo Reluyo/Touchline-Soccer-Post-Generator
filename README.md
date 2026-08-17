@@ -95,7 +95,7 @@ results** (Results):
 | Route | What it does |
 |---|---|
 | `/api/feeds` | News only. Fetches all feeds in parallel, filters, dedupes, drops anything already posted. Sorted newest-first, capped at 50. |
-| `/api/results` | Results only. Fetches finished matches from the last 7 days across the big-five leagues and the Champions League from football-data.org. |
+| `/api/results` | Results only. Fetches finished matches from the last 7 days across the big-five leagues and the Champions League from football-data.org, ranked biggest-game-first (see below). |
 
 This populates a picker screen — check the ones you want, then click
 **Build post**.
@@ -115,6 +115,19 @@ the final `/api/posts` call, so closing it mid-run means starting over.
 ---
 
 ## Things worth knowing
+
+**How the Results picker ranks matches.** Unlike News (which asks Claude
+to rank the candidate pool by newsworthiness), Results scoring is a plain
+deterministic formula in `lib/results.js`'s `matchImportance()` — no paid
+API call, matching the "results are templated, not written" design of
+`buildResultSlide()`. Three cheap signals, each self-contained (no extra
+data this app doesn't already have, like current table position): +3 for
+a Champions League match, +1 for each team that's on a short marquee-club
+list (so a game between two of them scores higher than one big club
+against a small side), +1 for a close, high-scoring scoreline. Matches
+scoring 2 or higher get a "★ Big game" badge in the picker. This only
+orders the list the picker shows — same manual-curation approach as News,
+it never selects or trims anything.
 
 **Why there's a password prompt on every page.** `middleware.js` checks
 every request (pages and API routes alike) against `APP_PASSWORD` via
@@ -236,7 +249,3 @@ in `app/page.jsx`.
 - **Analytics.** The dashboard shows the queue and history only.
 - **Feed health UI.** Failed feeds are counted in the picker screen but not
   listed anywhere you can act on.
-- **Results picker has no importance signal.** Every finished match in the
-  window is shown with no ranking or highlighting of the bigger games — you
-  do that filtering by eye. Could add derby/rivalry or table-position
-  weighting later if picking through a full week's matches gets tedious.

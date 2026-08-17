@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Slide from '@/components/Slide';
 import { captureAll, downloadDataUrl } from '@/lib/capture';
-import { buildResultSlide } from '@/lib/results';
+import { buildResultSlide, matchImportance } from '@/lib/results';
 
 // The CTA slide is the same "follow us" prompt on every post, so it
 // uses one fixed image rather than generating a new one each run --
@@ -490,6 +490,10 @@ export default function Dashboard() {
             }) : candidates.map((c) => {
               const key = candidateKey(postType, c);
               const isSelected = selected.has(key);
+              // Candidates already arrive ranked biggest-first (see
+              // rankMatches() in lib/results.js) -- this badge just makes
+              // that ranking visible rather than re-deriving anything.
+              const bigGame = matchImportance(c) >= 2;
               return (
                 <button
                   key={key}
@@ -500,6 +504,7 @@ export default function Dashboard() {
                   <div style={S.pickerCheck}>{isSelected ? '✓' : ''}</div>
                   <div>
                     <div style={S.cardHeadline}>
+                      {bigGame && <span style={S.bigGameBadge}>★ Big game</span>}
                       {c.homeTeam} {c.homeScore}-{c.awayScore} {c.awayTeam}
                     </div>
                     <div style={S.cardMeta}>
@@ -731,6 +736,10 @@ const styles = {
                  flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
                  fontSize: 14, color: '#3FD3C8', marginTop: 2 },
   pickerSummary: { fontSize: 13, color: '#8B9797', lineHeight: 1.45 },
+  bigGameBadge: { display: 'inline-block', background: '#2A2110', color: '#e0b355',
+                  border: '1px solid #7a5c1e', borderRadius: 5, padding: '2px 7px',
+                  fontSize: 10.5, fontWeight: 700, letterSpacing: '.03em',
+                  textTransform: 'uppercase', marginRight: 8, verticalAlign: 'middle' },
   reviewLayout: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(280px,380px)', gap: 28 },
   thumbRow: { display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' },
   thumb: { width: 34, height: 34, borderRadius: 6, background: '#171B1C',

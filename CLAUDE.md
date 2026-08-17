@@ -581,6 +581,34 @@ that a code audit doesn't.
   app's delete-draft feature, which correctly refuses to touch anything
   already approved.
 
+## Results picker ranking (2026-08-17, sixth pass)
+
+Added the importance signal the README's "Not built yet" section flagged
+as missing: `matchImportance()` / `rankMatches()` in `lib/results.js`
+score and reorder `fetchResults()`'s output biggest-game-first (Champions
+League, marquee clubs on either side, close/high-scoring scorelines — see
+README's "How the Results picker ranks matches" for the exact formula).
+Deliberately **not** a Claude call, unlike News's `rankStories()` — kept
+in line with Results' existing "templated, not written" design, and one
+more paid-API dependency wasn't worth it for a formula this simple.
+`app/page.jsx`'s picker shows a "★ Big game" badge (score ≥ 2) so the
+ranking is visible, not just an invisible reorder. `matchImportance()`
+first summed one point per *matching list entry* rather than per team,
+which double-counted any club with more than one synonym in the list
+(e.g. "Bayern Munich" matched both `'bayern'` and `'bayern munich'`,
+scoring 2 for one club) — caught by the new unit tests
+(`lib/results.test.js`) before it shipped, fixed to cap each team at one
+point regardless of how many synonyms it matches. `npm run build` and
+`npm test` (52/52) both clean.
+
+**Not live-tested** — same sandbox constraint as everything else this
+project hits: no network access to football-data.org from here, and the
+2026 season's big-five-plus-Champions-League fixtures haven't produced
+finished matches yet regardless. Worth a look once real Results data is
+available: does the "★ Big game" threshold (score ≥ 2) feel right, or
+does every Champions League game (which alone scores 3) drown out
+marquee-vs-marquee league games that only reach 2?
+
 ## Open items
 
 1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the auth
@@ -593,7 +621,9 @@ that a code audit doesn't.
 3. Try the new delete-draft buttons against a real queued post — see
    "Delete-drafts feature" above. Only mock-tested so far.
 4. Results workflow needs a real end-to-end test once the season starts and
-   `football-data.org` actually has finished matches to return.
+   `football-data.org` actually has finished matches to return — including
+   whether the new "★ Big game" ranking's threshold feels right against
+   real fixtures (see "Results picker ranking" above).
 5. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
 6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
@@ -611,10 +641,11 @@ that a code audit doesn't.
    run attempts, not completions — a schema change deliberately left
    for an explicit decision rather than done autonomously. `APP_PASSWORD`
    is the real defense in the meantime.
-10. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`) covers the
-    RSS filter/dedupe logic and `parseJson()`, but nothing else in the
-    app has test coverage — the API routes and `app/page.jsx`'s state
-    machine are still untested, by manual QA only.
+10. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
+    `lib/results.test.js`) covers the RSS filter/dedupe logic,
+    `parseJson()`, and now Results ranking, but nothing else in the app
+    has test coverage — the API routes and `app/page.jsx`'s state machine
+    are still untested, by manual QA only.
 11. Watch a real batch of downloaded posts for the text-overflow /
     font-embedding fix above actually holding up outside this sandbox's
     network constraints.
