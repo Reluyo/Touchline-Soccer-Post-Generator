@@ -54,11 +54,11 @@ left over to finish. Don't rename those without the user asking.
   secrets into chat; if a new one is ever needed, have them add it directly in
   Vercel's/Supabase's own UI):
   - `APP_PASSWORD` — gates every route via Basic Auth (`middleware.js`),
-    added 2026-08-17. **Not yet confirmed set in Vercel** — until it is, the
-    production app is still wide open; this is the one env var that actually
-    matters for security, not just for a feature to work. Fails open (no
-    prompt at all) if unset, so check this first if the password prompt
-    isn't appearing after deploy.
+    added 2026-08-17. **Confirmed set in Vercel 2026-08-17** (user confirmed
+    directly). This is the one env var that actually matters for security,
+    not just for a feature to work — fails open (no prompt at all) if
+    unset, so check this first if the password prompt ever stops
+    appearing after a deploy.
   - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
   - `ANTHROPIC_API_KEY` — writing/chat/translation (`lib/claude.js`)
   - `OPENAI_API_KEY` — `gpt-image-1` image generation (`lib/images.js`)
@@ -71,11 +71,13 @@ left over to finish. Don't rename those without the user asking.
     slides with no feed photo (`lib/imageSearch.js`), free tier 100
     queries/month (paid available). Added 2026-08-14, fifth session,
     pivoted to Brave Search 2026-08-15 when Google closed JSON API to
-    new customers — see "Web image search" below. Not yet confirmed set
-    in Vercel; if search silently never finds anything, check this is
-    actually there before assuming the feature is broken (the code treats
-    missing/invalid credentials as "search failed" and falls straight
-    through to AI generation, so it fails silent, not loud).
+    new customers — see "Web image search" below. **Confirmed set in
+    Vercel 2026-08-17** (user confirmed directly). Still not live-tested
+    (see open items) — if search ever silently stops finding anything,
+    check this key first before assuming the feature broke some other
+    way (the code treats missing/invalid credentials as "search failed"
+    and falls straight through to AI generation, so a bad key fails
+    silent, not loud).
 - **Model**: `claude-sonnet-5` (see `lib/claude.js`). Deliberately not Opus —
   cost-sensitive app. Uses `thinking: {type: 'adaptive'}` + `output_config:
   {effort: 'low'}` — disabling thinking outright was tried and reverted, it
@@ -487,8 +489,8 @@ its own commit with `npm run build` run first.
   DB — exactly the category of change the working agreement at the top
   of this file says to flag before pushing, not decide alone mid-run.
   Left undone rather than shipped in a form that looks like protection
-  but isn't. `APP_PASSWORD` (once confirmed set — see below) remains
-  the real primary defense here regardless.
+  but isn't. `APP_PASSWORD` (confirmed set 2026-08-17 — see above)
+  remains the real primary defense here regardless.
 - **Not yet done**: unit tests for `lib/filter.js` and `lib/claude.js`'s
   `parseJson()` — the last item on the re-audit's list, and the
   `translateCandidates()` bug from earlier the same day is a concrete
@@ -611,41 +613,41 @@ marquee-vs-marquee league games that only reach 2?
 
 ## Open items
 
-1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the auth
-   fix from the security-audit session above is inert and the app is
-   still fully open. Highest priority open item.
-2. Confirm the font-embedding fix actually reaches the real Anton font
+`APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
+Vercel as of 2026-08-17** (user confirmed directly) — no longer open items.
+
+1. Confirm the font-embedding fix actually reaches the real Anton font
    in production (this sandbox can't reach Google Fonts to check) —
    download a slide with a long headline and confirm both the correct
    font and no text overlap.
-3. Try the new delete-draft buttons against a real queued post — see
+2. Try the new delete-draft buttons against a real queued post — see
    "Delete-drafts feature" above. Only mock-tested so far.
-4. Results workflow needs a real end-to-end test once the season starts and
+3. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return — including
    whether the new "★ Big game" ranking's threshold feels right against
    real fixtures (see "Results picker ranking" above).
-5. Not built: analytics view, feed-health UI (failed feeds now show in a
+4. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
-6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+5. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 120`.
-7. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel, then
-   live-test `/api/image-search` — result relevance and the 100/month
-   free quota are both unverified so far.
-8. Cross-language duplicate candidates in the picker (see the first
+6. Live-test `/api/image-search` now that `BRAVE_SEARCH_API_KEY` is
+   confirmed set — result relevance and the 100/month free quota are
+   both still unverified.
+7. Cross-language duplicate candidates in the picker (see the first
    "Re-audit..." entry above) — worth revisiting once the translation
    fix has had a few real runs, since the picker showing readable
    English for every candidate was supposed to help a reviewer spot
    these by eye.
-9. A real daily/per-run cost cap (M-8 above) needs a new table to track
+8. A real daily/per-run cost cap (M-8 above) needs a new table to track
    run attempts, not completions — a schema change deliberately left
    for an explicit decision rather than done autonomously. `APP_PASSWORD`
    is the real defense in the meantime.
-10. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
-    `lib/results.test.js`) covers the RSS filter/dedupe logic,
-    `parseJson()`, and now Results ranking, but nothing else in the app
-    has test coverage — the API routes and `app/page.jsx`'s state machine
-    are still untested, by manual QA only.
-11. Watch a real batch of downloaded posts for the text-overflow /
+9. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
+   `lib/results.test.js`) covers the RSS filter/dedupe logic,
+   `parseJson()`, and now Results ranking, but nothing else in the app
+   has test coverage — the API routes and `app/page.jsx`'s state machine
+   are still untested, by manual QA only.
+10. Watch a real batch of downloaded posts for the text-overflow /
     font-embedding fix above actually holding up outside this sandbox's
     network constraints.
