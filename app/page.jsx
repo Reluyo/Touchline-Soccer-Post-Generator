@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Slide from '@/components/Slide';
-import { captureSlide, downloadDataUrl } from '@/lib/capture';
+import { captureAll, downloadDataUrl } from '@/lib/capture';
 import { buildResultSlide } from '@/lib/results';
 
 // The CTA slide is the same "follow us" prompt on every post, so it
@@ -335,13 +335,21 @@ export default function Dashboard() {
   async function downloadAll() {
     if (!activePost) return;
     try {
-      for (let i = 0; i < activePost.slides.length; i += 1) {
-        const node = slideRefs.current[i];
-        if (!node) continue;
-        setProgress(`Rendering slide ${i + 1} of ${activePost.slides.length}…`);
-        const dataUrl = await captureSlide(node);
-        downloadDataUrl(dataUrl, `slide-${String(i + 1).padStart(2, '0')}.png`);
-      }
+      // Keep each entry's original slide index alongside its node --
+      // captureAll() only sees the filtered list, but filenames still
+      // need to reflect true slide position even if a ref is missing.
+      const entries = activePost.slides
+        .map((_, i) => ({ index: i, node: slideRefs.current[i] }))
+        .filter((e) => e.node);
+
+      const dataUrls = await captureAll(
+        entries.map((e) => e.node),
+        (i, total) => setProgress(`Rendering slide ${i + 1} of ${total}…`)
+      );
+
+      dataUrls.forEach((dataUrl, i) => {
+        downloadDataUrl(dataUrl, `slide-${String(entries[i].index + 1).padStart(2, '0')}.png`);
+      });
     } catch (err) {
       setError(String(err.message || err));
     } finally {
