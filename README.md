@@ -68,6 +68,15 @@ npm run dev
 Open http://localhost:3000 — the browser will prompt for the password
 you set in step 1.
 
+Run `npm test` to run the unit tests (`lib/filter.test.js`,
+`lib/claude.test.js`) — pure-function coverage for the RSS
+filter/dedupe/fingerprint logic and `parseJson()`'s malformed-JSON
+repairs, using Node's built-in test runner. No test framework
+dependency needed; `lib/package.json` scopes ES module syntax to that
+directory alone so Node can load `.js` files there directly without
+affecting `next.config.js` (which stays CommonJS) or anything Next.js
+itself builds.
+
 ### 7. Deploy
 
 Push to GitHub, import the repo at vercel.com, and add the same six
