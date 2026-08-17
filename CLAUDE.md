@@ -494,33 +494,55 @@ its own commit with `npm run build` run first.
   `translateCandidates()` bug from earlier the same day is a concrete
   example of exactly what a test suite would have caught immediately.
 
+## Delete-drafts feature (2026-08-17, fourth pass)
+
+Added a way to manually discard a stale queued (unapproved) draft
+instead of waiting for 3 new ones to auto-evict it: a small `×` on
+each queue card, and a "Delete draft" button in the review screen next
+to Approve. Both go through a new `DELETE /api/posts` handler that
+refuses (400) unless the post's status is `queued` — it can't be used
+to erase approved history. Gated behind `window.confirm()` since it's
+irreversible.
+
+**Not live-tested against real data** — this sandbox has no Supabase
+credentials. Verified instead with the dev server + a headless browser
+with `/api/posts` responses mocked: both entry points send the correct
+`DELETE` request, the card's delete button's `stopPropagation()` does
+stop the card's own open-handler from also firing, and the review
+screen correctly backs out to the queue list after a successful
+delete. Worth deleting one real stale draft next time the app is open,
+just to close the loop on an actual live confirmation.
+
 ## Open items
 
 1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the auth
    fix from the security-audit session above is inert and the app is
    still fully open. Highest priority open item.
-2. Results workflow needs a real end-to-end test once the season starts and
+2. Try the new delete-draft buttons against a real queued post — see
+   "Delete-drafts feature" above. Only mock-tested so far.
+3. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return.
-3. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
+4. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
    watch the next few batches of generated posts for a body that still runs
    off the bottom.
-4. Not built: analytics view, feed-health UI (failed feeds now show in a
+5. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
-5. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 120`.
-6. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel, then
+7. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel, then
    live-test `/api/image-search` — result relevance and the 100/month
    free quota are both unverified so far.
-7. Cross-language duplicate candidates in the picker (see the first
+8. Cross-language duplicate candidates in the picker (see the first
    "Re-audit..." entry above) — worth revisiting once the translation
    fix has had a few real runs, since the picker showing readable
    English for every candidate was supposed to help a reviewer spot
    these by eye.
-8. No tests exist anywhere in the repo. `lib/filter.js` (pure functions)
-   and `lib/claude.js`'s `parseJson()` are the highest-leverage,
-   lowest-effort place to start — no test runner is set up yet either.
 9. A real daily/per-run cost cap (M-8 above) needs a new table to track
    run attempts, not completions — a schema change deliberately left
    for an explicit decision rather than done autonomously. `APP_PASSWORD`
    is the real defense in the meantime.
+10. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`) covers the
+    RSS filter/dedupe logic and `parseJson()`, but nothing else in the
+    app has test coverage — the API routes and `app/page.jsx`'s state
+    machine are still untested, by manual QA only.
