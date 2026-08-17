@@ -47,10 +47,18 @@ left over to finish. Don't rename those without the user asking.
 - **Database**: Supabase project **Touchline** (`bnasaybdlczxfbifezxz`, us-east-2,
   org "Boriapps"). RLS enabled with no policies (deny-all) on all tables — safe
   because the app only ever talks to Supabase server-side via the `service_role`
-  key, which bypasses RLS; the browser never calls Supabase directly.
+  key, which bypasses RLS; the browser never calls Supabase directly. This was
+  only ever set live in Supabase, not captured in `schema.sql` — fixed
+  2026-08-17, see that session's notes below.
 - **Env vars** (all set in Vercel already — don't ask the user to re-paste
   secrets into chat; if a new one is ever needed, have them add it directly in
   Vercel's/Supabase's own UI):
+  - `APP_PASSWORD` — gates every route via Basic Auth (`middleware.js`),
+    added 2026-08-17. **Not yet confirmed set in Vercel** — until it is, the
+    production app is still wide open; this is the one env var that actually
+    matters for security, not just for a feature to work. Fails open (no
+    prompt at all) if unset, so check this first if the password prompt
+    isn't appearing after deploy.
   - `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
   - `ANTHROPIC_API_KEY` — writing/chat/translation (`lib/claude.js`)
   - `OPENAI_API_KEY` — `gpt-image-1` image generation (`lib/images.js`)
@@ -318,18 +326,60 @@ unless a future session's network policy is less restrictive.
   explicitly asks for correct team *colours* over exact kit pattern, since
   pattern/sponsor-logo detail is what the model is most likely to get wrong.
 
+## Security audit + first fixes (2026-08-17)
+
+A separate session did a full read-only production-readiness audit against
+an old commit (before this file even existed) and committed it as
+`AUDIT.md` — its own scope note explains the staleness, don't treat its
+findings about the deleted auto-rank flow as current. This session started
+working through its two Critical items against the *actual* current code:
+
+- **C-1 (no auth on any route) — fixed.** Added `middleware.js`: gates
+  every page and API route behind the browser's native Basic Auth prompt,
+  checked against a single shared `APP_PASSWORD`. Chosen over Vercel
+  Deployment Protection because that's a dashboard toggle this sandbox has
+  no way to set (no network access, no Vercel API/MCP tool available) —
+  someone needs to either flip that in Vercel's UI directly, or (what this
+  session did instead) rely on this in-app gate. Fails open if
+  `APP_PASSWORD` is unset, so it can't lock anyone out of a deploy that
+  forgot to configure it — but that also means **it does nothing until the
+  env var is actually added in Vercel**. This has not been confirmed done
+  yet — check the env var list above before assuming this is live.
+- **C-2 (schema.sql missing RLS) — fixed.** Turned out RLS was already
+  enabled live on Supabase (deny-all, no policies) but `schema.sql` never
+  reflected it — a fresh setup from this file alone would *not* have had
+  that protection. Added the `alter table ... enable row level security`
+  statements to `schema.sql` so it now matches production. No live
+  behavior change; the service-role key already bypassed RLS either way.
+
+The remaining High/Medium items in `AUDIT.md` (unchecked Supabase
+`.single()` calls, the queue-trim race, no retry on Claude calls, etc.)
+were written against the old auto-rank flow and need re-checking against
+the current News/Results picker code before acting on them — several may
+already be moot (the picker flow removed a lot of what H-2's race
+condition depended on) and the current code has its own issues `AUDIT.md`
+never looked at (`/api/image`, `/api/image-search`, `/api/results` didn't
+exist yet when it was written).
+
 ## Open items
 
-1. Results workflow needs a real end-to-end test once the season starts and
+1. **Confirm `APP_PASSWORD` is set in Vercel** — until it is, the fix
+   above is inert and the app is still fully open. Highest priority open
+   item, see "Security audit" above.
+2. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return.
-2. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
+3. Text-overflow mitigation (see above) is a mitigation, not a proven fix —
    watch the next few batches of generated posts for a body that still runs
    off the bottom.
-3. Not built: analytics view, feed-health UI (failed feeds only show in the
+4. Not built: analytics view, feed-health UI (failed feeds only show in the
    picker screen's warning banner, nowhere persistent/actionable).
-4. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+5. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 60`.
-5. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel,
+6. Confirm `BRAVE_SEARCH_API_KEY` is actually set in Vercel,
    then live-test `/api/image-search` — result relevance and the
    100/month free quota are both unverified so far.
+7. `AUDIT.md`'s High/Medium findings need re-checking against the current
+   News/Results picker code (see "Security audit" above) before acting on
+   any of them — worth a fresh audit pass rather than assuming they still
+   apply as written.

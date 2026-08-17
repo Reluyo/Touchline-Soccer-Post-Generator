@@ -17,22 +17,33 @@ you've picked which candidates to use.
 
 ## Setup
 
-### 1. Supabase
+### 1. Pick a password
+
+This app has no login system of its own — `middleware.js` gates every
+page and API route behind the browser's built-in Basic Auth prompt,
+checked against a single shared `APP_PASSWORD`. Without it set, the app
+is wide open to anyone who finds the URL, and every AI call it makes is
+billed to your own account. Pick something long and random; any username
+works in the prompt, only the password is checked.
+
+### 2. Supabase
 
 1. Create a free project at supabase.com.
 2. Open **SQL Editor → New query**, paste all of `schema.sql`, click **Run**.
-   This creates the tables, seeds the soccer topic with its feeds, and
-   creates the `generated-images` storage bucket used for AI-generated
-   slide backgrounds.
+   This creates the tables (with row level security enabled and no
+   policies — deny-all for any client that isn't using the service_role
+   key), seeds the soccer topic with its feeds, and creates the
+   `generated-images` storage bucket used for AI-generated slide
+   backgrounds.
 3. Go to **Project Settings → Data API** and copy the Project URL.
 4. Go to **Project Settings → API Keys** and copy the `service_role` key.
 
-### 2. Anthropic
+### 3. Anthropic
 
 Get a key from console.anthropic.com. It needs credit on the account —
 a run costs a few cents.
 
-### 3. OpenAI
+### 4. OpenAI
 
 Get a key from platform.openai.com. Used to generate the cover and any
 story/result slide that needs an image (the CTA uses one fixed image,
@@ -40,25 +51,26 @@ not this). Your organization must be verified (**Settings → Organization
 → Verify**) before `gpt-image-1` will generate images — this is an
 OpenAI account setting, not something this app can work around.
 
-### 4. football-data.org
+### 5. football-data.org
 
 Free API key from football-data.org/client/register. Used only for
 **Results** posts — finished matches from the last 7 days across the
 big-five leagues and the Champions League.
 
-### 5. Local
+### 6. Local
 
 ```bash
 npm install
-cp .env.example .env.local     # then fill in the five values
+cp .env.example .env.local     # then fill in the six values
 npm run dev
 ```
 
-Open http://localhost:3000
+Open http://localhost:3000 — the browser will prompt for the password
+you set in step 1.
 
-### 6. Deploy
+### 7. Deploy
 
-Push to GitHub, import the repo at vercel.com, and add the same five
+Push to GitHub, import the repo at vercel.com, and add the same six
 environment variables under **Settings → Environment Variables**. Deploy.
 
 ---
@@ -94,6 +106,18 @@ the final `/api/posts` call, so closing it mid-run means starting over.
 ---
 
 ## Things worth knowing
+
+**Why there's a password prompt on every page.** `middleware.js` checks
+every request (pages and API routes alike) against `APP_PASSWORD` via
+Basic Auth. This app has no per-user accounts — it's a shared password
+for the one person running it, chosen over a real auth system as the
+smallest fix that still stops a stranger who finds the URL from running
+up your Anthropic/OpenAI/Brave bill. It fails *open* (no prompt at all)
+if `APP_PASSWORD` isn't set, so a deploy that forgot to configure it
+doesn't lock you out — but that also means it's silently unprotected
+until you set it. Once the browser has the credential it attaches it
+automatically to every same-origin request, so nothing else in the app
+needed to change to support this.
 
 **Why the browser drives the run.** Vercel kills any single serverless request
 after ~10 seconds on the free tier. A whole run takes a minute or two, so it's

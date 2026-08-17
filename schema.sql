@@ -82,6 +82,25 @@ create table seen_stories (
 create unique index seen_topic_fingerprint_idx on seen_stories (topic_id, fingerprint);
 
 -- ---------------------------------------------------------------
+-- ROW LEVEL SECURITY
+-- The app only ever talks to Postgres server-side, via the
+-- service_role key (lib/supabase.js), which bypasses RLS regardless
+-- of policy -- so this has no effect on how the app behaves today.
+-- It exists so these tables are never accidentally wide open: enabling
+-- RLS with zero policies is deny-all for the anon/authenticated roles,
+-- which matters the day anyone adds a client-side Supabase call using
+-- the publishable/anon key. Deny-all is the safe default to start
+-- from; add explicit policies if that ever becomes a real use case.
+-- (This matches what's already enabled live on the production
+-- Supabase project -- see AUDIT.md, C-2 -- this just brings schema.sql
+-- back in sync so a fresh setup gets the same protection.)
+-- ---------------------------------------------------------------
+alter table topics enable row level security;
+alter table posts enable row level security;
+alter table slides enable row level security;
+alter table seen_stories enable row level security;
+
+-- ---------------------------------------------------------------
 -- STORAGE
 -- Bucket for slide images this app sources itself rather than getting
 -- from an RSS feed: AI-generated backgrounds (lib/images.js) and photos
