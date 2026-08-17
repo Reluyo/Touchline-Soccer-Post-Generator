@@ -611,6 +611,33 @@ available: does the "★ Big game" threshold (score ≥ 2) feel right, or
 does every Champions League game (which alone scores 3) drown out
 marquee-vs-marquee league games that only reach 2?
 
+## First real production run: a new parseJson() quirk found and fixed (2026-08-17, seventh pass)
+
+User ran a real News build (with `APP_PASSWORD`/`BRAVE_SEARCH_API_KEY` now
+live) and hit a hard failure while writing story slides: `writeSlide()`'s
+Claude response for a Leão-to-Roma transfer story came back as
+`{"text":"Leao",true}` instead of `{"text":"Leao","key":true}` — the model
+dropped the `"key":` property name entirely, not just its quotes or a
+comma, which is a shape `parseJson()`'s existing hardening (trailing
+commas, unquoted names, missing commas, Python literals) didn't cover.
+Confirmed reproducing the exact reported string before touching anything.
+
+**Fixed**: added one more repair to `parseJson()` in `lib/claude.js` —
+a quoted string immediately followed by a bare `true`/`false`/`null`
+(no property name between them) always means "key" was dropped, since
+that's the only boolean field in any of this app's Claude-facing JSON
+schemas (rank/translate/write/chat). Scoped the regex to only fire right
+after a string value, not after any comma, so it can't misfire inside a
+legitimate array of booleans elsewhere — covered by a new test for
+exactly that. Added two tests to `lib/claude.test.js`: one reproducing
+the real failing string verbatim, one confirming a plain boolean array
+is left untouched. `npm test` (54/54) and `npm run build` both clean.
+
+This is the first bug caught by an actual live run since `APP_PASSWORD`
+and `BRAVE_SEARCH_API_KEY` were confirmed set — worth treating any future
+report from a real run the same way: reproduce the exact failure first,
+fix narrowly, add a regression test, don't guess at the broader pattern.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
