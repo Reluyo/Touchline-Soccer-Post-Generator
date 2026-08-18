@@ -814,62 +814,85 @@ untouched. Reproduced the exact reported string before touching
 anything, per the standing practice from prior sessions. `npm test`
 (94/94) and `npm run build` both clean.
 
+## First confirmed-good run (2026-08-18, twelfth pass)
+
+User reported a successful run; checked the actual saved post in
+Supabase (id `5fc12fb6...`) rather than taking that at face value, since
+several "fixed" items were still unconfirmed. Real, concrete evidence
+this time, not just an absence of errors:
+
+- **The Brave Image Search fix is confirmed working** -- the single
+  highest-priority open item since the endpoint switch, finally
+  resolved. 4 of 5 story slides (Bezos/Liverpool, Mourinho/Real Madrid,
+  Rodri/Barcelona, Man City/Fernandez) carry a `search-<id>.jpeg`
+  `image_url` in the `generated-images` bucket -- real photos found via
+  Brave and re-hosted, not AI-generated. The 5th (Romero/Atlético) used
+  its own feed photo directly, so search wasn't even needed there.
+  **Zero AI-generated images anywhere in the post** -- the cover collage
+  is 3 search photos + 1 feed photo. This is also the first real
+  evidence toward the user's "get away from AI generation" ask.
+- **No duplicate stories, no null bodies.** All 5 story slides have
+  distinct headlines and non-empty, well-formed body text -- both the
+  `rankStories()` dedup fix and `writeSlide()`'s body-validation/retry/
+  fallback held up on a real run.
+- **Not confirmed either way by this post**: the two RSS fixes (Get
+  French Football News / Get Italian Football News's User-Agent and
+  bare-`&` repair) -- neither outlet's stories appear in this post, but
+  that alone doesn't prove they're still broken, only that nothing from
+  them got picked (or the picker screen wasn't inspected for failed-feed
+  banners this run). Still worth a direct check next time.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
 Vercel as of 2026-08-17** (user confirmed directly) — no longer open items.
 
-1. **Highest priority**: confirm `/api/image-search` actually returns a
-   usable photo now that the `safesearch: 'moderate'` 422 is fixed (see
-   "Confirmed live" above) — the endpoint and request are now confirmed
-   reachable/valid via a real error log, but no real call has yet
-   gotten *past* that error to show whether search finds good results.
-   Run News, pick a story with no feed photo, and check whether a real
-   (non-AI-generated) image lands on that slide, and whether it's
-   reasonably sharp. Check server logs for `[imageSearch]` lines if not:
-   `0 candidate images` means the response-shape assumption
-   (`data.results[].properties.url` etc.) needs another look; `N
-   candidate images` but still no result means every candidate failed
-   the download/size checks.
-2. Confirm the two RSS fixes from the ninth pass actually work: the new
-   browser User-Agent on `lib/feeds.js`'s `Parser` (should fix Get French
-   Football News and Get Italian Football News, both WordPress sites
-   likely blocking the old `"rss-parser"` UA) and the bare-`&` XML repair
-   retry. Also confirm `writeSlide()`'s new retry-then-fallback actually
-   stops a slide from shipping with no body text -- the fallback path
-   itself (reusing the story's own summary) was only unit-tested with
-   mocked Claude responses, not seen on a real thin-source story yet.
-3. Confirm the font-embedding fix actually reaches the real Anton font
+**Confirmed working as of the twelfth pass (2026-08-18)**, all via a
+real saved post inspected in Supabase, not just an error-free report:
+the Brave Image Search fix (real photos, zero AI-generated images in
+that post), `rankStories()`'s duplicate-index fix (5 distinct stories,
+no repeats), and `writeSlide()`'s body-validation/fallback (no null
+bodies). No longer open items.
+
+1. **Highest priority**: confirm the two RSS fixes from the ninth pass
+   actually work — the new browser User-Agent on `lib/feeds.js`'s
+   `Parser` (should fix Get French Football News and Get Italian
+   Football News, both WordPress sites likely blocking the old
+   `"rss-parser"` UA) and the bare-`&` XML repair retry. Neither
+   outlet's stories have appeared in a post since the fix, which isn't
+   proof either way — check the picker screen's failed-feeds banner
+   directly on the next run.
+2. Confirm the font-embedding fix actually reaches the real Anton font
    in production (this sandbox can't reach Google Fonts to check) —
    download a slide with a long headline and confirm both the correct
    font and no text overlap.
-4. Try the new delete-draft buttons against a real queued post — see
+3. Try the new delete-draft buttons against a real queued post — see
    "Delete-drafts feature" above. Only mock-tested so far.
-5. Results workflow needs a real end-to-end test once the season starts and
+4. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return — including
    whether the new "★ Big game" ranking's threshold feels right against
    real fixtures (see "Results picker ranking" above).
-6. Not built: analytics view, feed-health UI (failed feeds now show in a
+5. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
-7. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 120`.
-8. Cross-language duplicate candidates in the picker (see the first
+7. Cross-language duplicate candidates in the picker (see the first
    "Re-audit..." entry above) — worth revisiting once the translation
    fix has had a few real runs, since the picker showing readable
    English for every candidate was supposed to help a reviewer spot
    these by eye.
-9. A real daily/per-run cost cap (M-8 above) needs a new table to track
+8. A real daily/per-run cost cap (M-8 above) needs a new table to track
    run attempts, not completions — a schema change deliberately left
    for an explicit decision rather than done autonomously. `APP_PASSWORD`
    is the real defense in the meantime.
-10. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
-    `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
-    `lib/imageSearch.test.js`) covers the RSS filter/dedupe logic,
-    `parseJson()`, Results ranking, feed image selection, and the header
-    parser, but nothing else in the app has test coverage — the API
-    routes and `app/page.jsx`'s state machine are still untested, by
-    manual QA only.
-11. Watch a real batch of downloaded posts for the text-overflow /
+9. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
+   `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
+   `lib/imageSearch.test.js`) covers the RSS filter/dedupe logic,
+   `parseJson()`, Results ranking, feed image selection, and the header
+   parser, but nothing else in the app has test coverage — the API
+   routes and `app/page.jsx`'s state machine are still untested, by
+   manual QA only.
+10. Watch a real batch of downloaded posts for the text-overflow /
     font-embedding fix above actually holding up outside this sandbox's
     network constraints.
