@@ -789,6 +789,31 @@ clean. **Still needs one real run to confirm** search actually returns
 usable results now that the request itself is valid -- this was a
 request-validation fix, not a live content-quality check.
 
+## Another parseJson() quirk: a stray "=" and a leaked TypeScript cast (2026-08-18, eleventh pass)
+
+User hit another `writeSlide()` parse failure on a live run: Claude's
+response came back as `{"headline_parts":[{"text":"Rodri","key":=true}
+as any]}` instead of `{"headline_parts":[{"text":"Rodri","key":true}]}`
+-- two quirks in one response, neither covered by the existing repairs:
+a stray `=` wedged between the `"key":` colon and its value, and a
+trailing TypeScript type assertion (`as any`) leaked onto the end of
+the object, right before the array's closing `]`. Both read like
+JS/TS-flavored code briefly leaking into what should be plain JSON.
+
+**Fixed**: two more narrow repairs in `parseJson()`. The `:=` fix only
+strips the `=` when what follows is actually the start of a JSON value
+(`true`/`false`/`null`/a quote/a digit/`[`/`{`), so a colon genuinely
+followed by `=` inside real string content would be left alone. The
+`as any` fix only fires when sat directly between a value-ending token
+(`}`, `]`, or a closing quote) and the next JSON structural character --
+deliberately tight, since the word "as" appears constantly in normal
+football copy ("seen as a coup") and a looser match would have
+corrupted real body text. Covered by new tests in `lib/claude.test.js`,
+including one confirming the word "as" inside real text is left
+untouched. Reproduced the exact reported string before touching
+anything, per the standing practice from prior sessions. `npm test`
+(94/94) and `npm run build` both clean.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
