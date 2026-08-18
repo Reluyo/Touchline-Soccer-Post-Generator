@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Slide from '@/components/Slide';
 import { captureAll, downloadDataUrl } from '@/lib/capture';
 import { buildResultSlide, matchImportance } from '@/lib/results';
+import { searchQuery } from '@/lib/searchQuery';
 
 // The CTA slide is the same "follow us" prompt on every post, so it
 // uses one fixed image rather than generating a new one each run --
@@ -16,17 +17,6 @@ const CTA_IMAGE_URL = 'https://bnasaybdlczxfbifezxz.supabase.co/storage/v1/objec
 function slideText(slide) {
   const headline = (slide.headline_parts || []).map((p) => p.text).join(' ');
   return [headline, slide.body].filter(Boolean).join('. ');
-}
-
-// A full sentence makes a poor image-search query -- this pulls just the
-// "key" headline parts (the club/player names writeSlide already flagged
-// as the actual news), which is what someone would type into a search
-// box themselves.
-function searchQuery(slide) {
-  return (slide.headline_parts || [])
-    .filter((p) => p.key)
-    .map((p) => p.text)
-    .join(' ');
 }
 
 // News candidates are keyed by their story fingerprint, results by the

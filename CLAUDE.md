@@ -842,6 +842,40 @@ this time, not just an absence of errors:
   them got picked (or the picker screen wasn't inspected for failed-feed
   banners this run). Still worth a direct check next time.
 
+## Image search returning a barely-related photo (2026-08-18, thirteenth pass)
+
+User flagged the Man City/£120m gossip-column slide's search photo as
+"barely related." Root-caused via the real slide from the previous
+session's confirmed-good post: `writeSlide()` had marked `"Man City"`
+and `"£120m"` as the headline's `key` parts, but not `"Fernandez"`
+(bundled into a non-key part, `"Fernandez move"`) -- the story was
+actually about Enzo Fernandez, but the old `searchQuery()` in
+`app/page.jsx` built its Brave query from *only* the key-flagged parts,
+so it searched `"Man City £120m"`: a transfer fee polluting the query,
+and the one player the story was about missing entirely.
+
+**Fixed, and generalized past this one case.** Moved `searchQuery()`
+into a new `lib/searchQuery.js` (pure, dependency-free, so it's
+testable outside `app/page.jsx`, which nothing else in that file is
+yet) and stopped trusting the headline's `key` flag altogether --
+`writeSlide()` marks whatever part it judges "the news," which is
+sometimes a fee or other non-name detail, not reliably just names. The
+new version instead extracts capitalized-word runs from the *full*
+headline text via a Unicode-aware regex (`\p{Lu}[\p{L}'-]*`, not plain
+`A-Z`, so accented names like Mbappé and Atlético aren't truncated at
+the accent). This works because `writeSlide()`'s own prompt already
+writes connector words in lowercase ("eye", "for", "of the") regardless
+of key/non-key status -- so a capitalized-word extraction naturally
+keeps names and drops fees, percentages, and connectors without needing
+the key flag to be right, and catches a name like "Fernandez" even
+when it's bundled into a non-key part. Covered by `lib/searchQuery.test.js`,
+including the exact reported Man City/Fernandez headline. `npm test`
+(102/102) and `npm run build` both clean.
+
+**Not live-tested** -- same sandbox constraint as everything else here;
+worth watching the next few real runs for whether search results get
+more specifically on-topic now, not just less obviously wrong.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
@@ -888,10 +922,11 @@ bodies). No longer open items.
    is the real defense in the meantime.
 9. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
    `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
-   `lib/imageSearch.test.js`) covers the RSS filter/dedupe logic,
-   `parseJson()`, Results ranking, feed image selection, and the header
-   parser, but nothing else in the app has test coverage — the API
-   routes and `app/page.jsx`'s state machine are still untested, by
+   `lib/imageSearch.test.js`, `lib/searchQuery.test.js`) covers the RSS
+   filter/dedupe logic, `parseJson()`, Results ranking, feed image
+   selection, the header parser, and the image-search query builder, but
+   nothing else in the app has test coverage — the API routes and most
+   of `app/page.jsx`'s state machine are still untested, by
    manual QA only.
 10. Watch a real batch of downloaded posts for the text-overflow /
     font-embedding fix above actually holding up outside this sandbox's
