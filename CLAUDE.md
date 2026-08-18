@@ -760,24 +760,52 @@ session's report didn't mention whether search found real photos, only
 this Guardian feed-image issue and the two bugs above. Still the
 single highest-priority open item.
 
+## Confirmed live: the Brave Image Search endpoint was right, one request param wasn't (2026-08-18, tenth pass)
+
+User pasted the actual server log line, which resolved the top open
+item without further guessing: `[imageSearch] Brave API 422: {...
+"detail":"Unable to validate request parameter(s)"... "loc":["query",
+"safesearch"...`. Two things confirmed at once --
+
+- **The endpoint switch itself was correct.** A 422 is Brave validating
+  and rejecting a specific parameter, not a 404 -- `/res/v1/images/search`
+  is a real, reachable endpoint on this account's plan. If the endpoint
+  guess had been wrong, this would have been a 404, not a 422.
+- **`safesearch: 'moderate'` doesn't exist on this endpoint.** Carried
+  over unchanged from the old Web Search code, but confirmed via
+  `WebSearch` (Brave's own docs) that Image Search's `safesearch` is a
+  2-value enum, `off`/`strict` -- not the 3-value `off`/`moderate`/
+  `strict` the Web Search endpoint takes. Every real call was failing
+  outright before search ever got a chance to find anything, which is
+  also almost certainly why "does search find real photos" went
+  unanswered in every report since the endpoint switch -- it never got
+  the chance to run.
+
+**Fixed**: dropped the `safesearch` param entirely rather than guess at
+`strict` unverified -- Brave's documented default for this endpoint is
+already `strict`, so omitting it gets the same behavior without a
+second unverified guess. `npm test` (90/90) and `npm run build` both
+clean. **Still needs one real run to confirm** search actually returns
+usable results now that the request itself is valid -- this was a
+request-validation fix, not a live content-quality check.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
 Vercel as of 2026-08-17** (user confirmed directly) — no longer open items.
 
-1. **Highest priority**: confirm the switch to Brave's dedicated Image
-   Search endpoint in `lib/imageSearch.js` actually works against a real
-   call — the endpoint/response shape were corroborated via `WebSearch`,
-   not fetched live (no network egress to Brave from this sandbox). Run
-   News, pick a story with no feed photo, and check whether a real
+1. **Highest priority**: confirm `/api/image-search` actually returns a
+   usable photo now that the `safesearch: 'moderate'` 422 is fixed (see
+   "Confirmed live" above) — the endpoint and request are now confirmed
+   reachable/valid via a real error log, but no real call has yet
+   gotten *past* that error to show whether search finds good results.
+   Run News, pick a story with no feed photo, and check whether a real
    (non-AI-generated) image lands on that slide, and whether it's
-   reasonably sharp. If it still falls straight through to AI every
-   time, check the server logs for `[imageSearch]` lines — `0 candidate
-   images` means the endpoint/response-shape guess was wrong; `N
+   reasonably sharp. Check server logs for `[imageSearch]` lines if not:
+   `0 candidate images` means the response-shape assumption
+   (`data.results[].properties.url` etc.) needs another look; `N
    candidate images` but still no result means every candidate failed
-   the download/size checks. Two more real runs have gone by since this
-   was written without confirming it either way — worth prioritizing
-   getting one clean confirmation over continuing to fix other things blind.
+   the download/size checks.
 2. Confirm the two RSS fixes from the ninth pass actually work: the new
    browser User-Agent on `lib/feeds.js`'s `Parser` (should fix Get French
    Football News and Get Italian Football News, both WordPress sites
