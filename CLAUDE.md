@@ -876,6 +876,45 @@ including the exact reported Man City/Fernandez headline. `npm test`
 worth watching the next few real runs for whether search results get
 more specifically on-topic now, not just less obviously wrong.
 
+## Changing a slide's image from the edit chat (2026-08-18, fourteenth pass)
+
+User asked whether the edit chat could change a slide's image -- it
+couldn't; `editChat()` only ever knew about `headline_parts`/`body`.
+Added it, asked the user how it should find a new image, and built the
+option they picked: search, or paste a URL directly.
+
+- **`editChat()`** (`lib/claude.js`) gets two new response shapes
+  alongside the existing `update`/`ask`: `{"action":"image_url","url":
+  "..."}` when the message contains a URL, and `{"action":
+  "image_search","query":"..."}` otherwise (e.g. "find a different
+  photo of Rodri") -- the prompt tells it the query must be just
+  player/club names, same "names only, not a sentence" rule
+  `lib/searchQuery.js` already enforces for the initial build, so a
+  request like "one without the crowd" still resolves to a clean
+  name-based query rather than including stray descriptive words.
+- **`/api/chat`** executes whichever action Claude picked: `image_url`
+  re-hosts the pasted URL (via a new `rehostImageUrl()` in
+  `lib/imageSearch.js`, reusing `searchStoryImage()`'s download/upload
+  path but skipping its minimum-width rejection -- a URL you pasted
+  yourself is an explicit choice, not a candidate to screen);
+  `image_search` calls the existing `searchStoryImage()`. Either
+  failure (bad URL, no results) degrades to an `ask` turn explaining
+  what went wrong rather than silently doing nothing or erroring out.
+  A successful image change also clears `image_urls` -- otherwise a
+  cover slide's own photo collage would keep rendering over the new
+  single image (`Slide.jsx` prefers the collage whenever it has 2+
+  entries), so changing a cover's image now correctly collapses it to
+  a single photo.
+- **`app/page.jsx`** merges `result.image_url` into the active slide
+  the same way it already merged `headline_parts`/`body`, and the empty-
+  chat-log hint text now mentions the image-change option so it's
+  discoverable without asking.
+
+**Not live-tested** -- no way to exercise the real chat flow (or a real
+Brave/Supabase call) from this sandbox. `npm test` (102/102, no new
+tests added -- this is mostly route/prompt wiring, not new pure logic)
+and `npm run build` both clean.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
@@ -896,38 +935,42 @@ bodies). No longer open items.
    outlet's stories have appeared in a post since the fix, which isn't
    proof either way — check the picker screen's failed-feeds banner
    directly on the next run.
-2. Confirm the font-embedding fix actually reaches the real Anton font
+2. Try the new edit-chat image change (fourteenth pass) against a real
+   post: both "find a different photo of X" (search) and pasting a URL
+   directly, on both a story slide and a cover slide (confirm the
+   collage correctly collapses to the new single photo).
+3. Confirm the font-embedding fix actually reaches the real Anton font
    in production (this sandbox can't reach Google Fonts to check) —
    download a slide with a long headline and confirm both the correct
    font and no text overlap.
-3. Try the new delete-draft buttons against a real queued post — see
+4. Try the new delete-draft buttons against a real queued post — see
    "Delete-drafts feature" above. Only mock-tested so far.
-4. Results workflow needs a real end-to-end test once the season starts and
+5. Results workflow needs a real end-to-end test once the season starts and
    `football-data.org` actually has finished matches to return — including
    whether the new "★ Big game" ranking's threshold feels right against
    real fixtures (see "Results picker ranking" above).
-5. Not built: analytics view, feed-health UI (failed feeds now show in a
+6. Not built: analytics view, feed-health UI (failed feeds now show in a
    persistent banner for that session, but nothing is recorded across runs).
-6. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
+7. `rankStories()`'s ranking of a large (300+) candidate pool hasn't been
    tested against a real high-volume week — watch whether it stays fast
    enough and within `/api/feeds`'s `maxDuration = 120`.
-7. Cross-language duplicate candidates in the picker (see the first
+8. Cross-language duplicate candidates in the picker (see the first
    "Re-audit..." entry above) — worth revisiting once the translation
    fix has had a few real runs, since the picker showing readable
    English for every candidate was supposed to help a reviewer spot
    these by eye.
-8. A real daily/per-run cost cap (M-8 above) needs a new table to track
+9. A real daily/per-run cost cap (M-8 above) needs a new table to track
    run attempts, not completions — a schema change deliberately left
    for an explicit decision rather than done autonomously. `APP_PASSWORD`
    is the real defense in the meantime.
-9. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
-   `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
-   `lib/imageSearch.test.js`, `lib/searchQuery.test.js`) covers the RSS
-   filter/dedupe logic, `parseJson()`, Results ranking, feed image
-   selection, the header parser, and the image-search query builder, but
-   nothing else in the app has test coverage — the API routes and most
-   of `app/page.jsx`'s state machine are still untested, by
-   manual QA only.
-10. Watch a real batch of downloaded posts for the text-overflow /
+10. `npm test` (`lib/filter.test.js`, `lib/claude.test.js`,
+    `lib/results.test.js`, `lib/feeds.test.js`, `lib/imageDimensions.test.js`,
+    `lib/imageSearch.test.js`, `lib/searchQuery.test.js`) covers the RSS
+    filter/dedupe logic, `parseJson()`, Results ranking, feed image
+    selection, the header parser, and the image-search query builder, but
+    nothing else in the app has test coverage — the API routes and most
+    of `app/page.jsx`'s state machine (including the new image-change
+    chat actions) are still untested, by manual QA only.
+11. Watch a real batch of downloaded posts for the text-overflow /
     font-embedding fix above actually holding up outside this sandbox's
     network constraints.

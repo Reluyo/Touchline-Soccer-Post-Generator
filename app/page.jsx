@@ -304,6 +304,13 @@ export default function Dashboard() {
           ...slide,
           headline_parts: result.headline_parts ?? slide.headline_parts,
           body: result.body ?? slide.body,
+          // A successful image_url/image_search action carries a new
+          // image_url and nothing else -- headline_parts/body fall back
+          // to the existing slide above, unaffected. image_urls is
+          // cleared alongside it (see api/chat/route.js) so a cover's
+          // collage doesn't keep rendering over the new single photo.
+          image_url: result.image_url ?? slide.image_url,
+          image_urls: result.image_url ? [] : slide.image_urls,
         };
         setActivePost(updated);
       }
@@ -624,7 +631,7 @@ export default function Dashboard() {
                 {chatLog.length === 0 && (
                   <p style={S.empty}>
                     Ask for changes — “make the headline punchier”, “shorten the body”,
-                    “lead with the fee”.
+                    “find a different photo of Rodri”, or paste a photo URL directly.
                   </p>
                 )}
                 {chatLog.map((m, i) => (
