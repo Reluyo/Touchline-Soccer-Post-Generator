@@ -66,6 +66,12 @@ export default function Dashboard() {
   const [chatLog, setChatLog] = useState([]);
   const [chatInput, setChatInput] = useState('');
   const [chatBusy, setChatBusy] = useState(false);
+  // How many times "find a different photo" has been asked for each
+  // slide this session, keyed by slide id -- passed to /api/chat so a
+  // repeat request skips past photos already shown instead of the
+  // search landing on the same one every time. Reset alongside chatLog
+  // whenever a different post (or no post) is opened.
+  const [imageSearchAttempts, setImageSearchAttempts] = useState({});
 
   const slideRefs = useRef({});
 
@@ -268,6 +274,7 @@ export default function Dashboard() {
       setActivePost({ ...savedPost, slides: mergedSlides });
       setActiveSlideIndex(0);
       setChatLog([]);
+      setImageSearchAttempts({});
       refresh(); // background -- keeps the queue list accurate for later, nothing here depends on it
     } catch (err) {
       setError(String(err.message || err));
@@ -292,6 +299,7 @@ export default function Dashboard() {
         slideId: slide.id,
         history: chatLog,
         message,
+        imageSearchAttempt: imageSearchAttempts[slide.id] || 0,
       });
 
       if (result.action === 'ask') {
@@ -312,7 +320,20 @@ export default function Dashboard() {
           image_url: result.image_url ?? slide.image_url,
           image_urls: result.image_url ? [] : slide.image_urls,
         };
+        // The changed story's old photo may also have been featured in
+        // the cover's own collage -- api/chat/route.js already swapped
+        // it there in the database when that's the case, and tells us
+        // so here so the on-screen cover reflects it immediately too.
+        if (result.cover) {
+          const coverIndex = updated.slides.findIndex((s) => s.id === result.cover.id);
+          if (coverIndex !== -1) {
+            updated.slides[coverIndex] = { ...updated.slides[coverIndex], image_urls: result.cover.image_urls };
+          }
+        }
         setActivePost(updated);
+        if (result.action === 'image_search') {
+          setImageSearchAttempts((prev) => ({ ...prev, [slide.id]: (prev[slide.id] || 0) + 1 }));
+        }
       }
     } catch (err) {
       setChatLog([...nextLog, { role: 'assistant', content: `Error: ${err.message}` }]);
@@ -338,6 +359,7 @@ export default function Dashboard() {
       if (!res.ok) throw new Error(data.error || `Request failed: ${res.status}`);
       setActivePost(null);
       setChatLog([]);
+      setImageSearchAttempts({});
       await refresh();
     } catch (err) {
       setError(String(err.message || err));
@@ -365,6 +387,7 @@ export default function Dashboard() {
       if (activePost?.id === postId) {
         setActivePost(null);
         setChatLog([]);
+        setImageSearchAttempts({});
       }
       await refresh();
     } catch (err) {
@@ -532,7 +555,7 @@ export default function Dashboard() {
                     ×
                   </button>
                   <button
-                    onClick={() => { setActivePost(p); setActiveSlideIndex(0); setChatLog([]); }}
+                    onClick={() => { setActivePost(p); setActiveSlideIndex(0); setChatLog([]); setImageSearchAttempts({}); }}
                     style={S.cardOpen}
                   >
                     <div style={S.cardMeta}>
@@ -556,7 +579,7 @@ export default function Dashboard() {
               {history.map((p) => (
                 <button
                   key={p.id}
-                  onClick={() => { setActivePost(p); setActiveSlideIndex(0); setChatLog([]); }}
+                  onClick={() => { setActivePost(p); setActiveSlideIndex(0); setChatLog([]); setImageSearchAttempts({}); }}
                   style={{ ...S.card, opacity: 0.7 }}
                 >
                   <div style={S.cardMeta}>

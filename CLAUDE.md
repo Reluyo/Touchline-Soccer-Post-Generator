@@ -915,6 +915,46 @@ Brave/Supabase call) from this sandbox. `npm test` (102/102, no new
 tests added -- this is mostly route/prompt wiring, not new pure logic)
 and `npm run build` both clean.
 
+## Two bugs from the first real use of the image-change chat (2026-08-18, fifteenth pass)
+
+User tried it: pasting a URL worked, but "find a different picture"
+kept returning the exact same photo every time, and changing a story
+slide's photo didn't update that same photo inside the cover collage.
+
+- **"Find a different picture" always returned the same one — fixed,
+  root cause confirmed.** `searchStoryImage()` is fully deterministic:
+  same query in, same Brave ranking out, and it always returned the
+  *first* usable candidate. Nothing tracked "already showed you this
+  one." Fixed: `searchStoryImage()` now takes a `skip` count and skips
+  that many already-*validated*-usable candidates before returning the
+  next one (not just the first N raw results, which could include
+  duds). `app/page.jsx` tracks how many times "find a different photo"
+  has been asked per slide this session (`imageSearchAttempts`, reset
+  whenever a different post is opened) and sends it as
+  `imageSearchAttempt` on every chat request; `/api/chat` passes it
+  straight through as `skip`. Re-downloads/re-validates candidates up
+  to `skip` again on every call rather than caching them -- wasteful,
+  but this is one interactive request at a time, not a hot loop.
+- **A story slide's new photo didn't propagate to the cover collage —
+  fixed.** The cover's `image_urls` collage is built once at post-build
+  time from each story's photo (`buildPost()`'s `realImages`) and
+  never revisited after that. `/api/chat` now checks, after a
+  successful story-slide image change, whether that slide's *old*
+  `image_url` appears in the post's cover's `image_urls`; if so it
+  swaps in the new URL there too and reports the updated collage back
+  in the response (`result.cover`), which `app/page.jsx` applies to the
+  cover slide in local state alongside the story slide itself. Scoped
+  to `role === 'story'` only -- a cover changing its own image already
+  worked (existing `image_urls: []` clear), and CTA uses one fixed
+  image that's never in a collage.
+
+Both fixed directly from the user's real-use report rather than
+guessed at abstractly. **Not live-tested against the actual fix** --
+same sandbox constraint as the feature itself. `npm test` (102/102, no
+new tests -- `searchStoryImage()` and the route have never had network-
+mocked tests, consistent with `rehostImageUrl()` before it) and
+`npm run build` both clean.
+
 ## Open items
 
 `APP_PASSWORD` and `BRAVE_SEARCH_API_KEY` are both **confirmed set in
@@ -935,10 +975,12 @@ bodies). No longer open items.
    outlet's stories have appeared in a post since the fix, which isn't
    proof either way — check the picker screen's failed-feeds banner
    directly on the next run.
-2. Try the new edit-chat image change (fourteenth pass) against a real
-   post: both "find a different photo of X" (search) and pasting a URL
-   directly, on both a story slide and a cover slide (confirm the
-   collage correctly collapses to the new single photo).
+2. Confirm the fifteenth pass's two fixes hold up: "find a different
+   photo" actually returns a different photo on the second/third ask
+   (not just the first retry), and changing a story slide's image now
+   updates that same photo inside the cover collage. Paste-a-URL and
+   changing a cover's own image directly were both already confirmed
+   working before this pass.
 3. Confirm the font-embedding fix actually reaches the real Anton font
    in production (this sandbox can't reach Google Fonts to check) —
    download a slide with a long headline and confirm both the correct
